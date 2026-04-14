@@ -15,31 +15,19 @@ class _LoginScreenState extends State<LoginScreen> {
   final _authService = AuthService();
   bool _isLoading = false;
 
-  void _handleLogin() async {
-    setState(() => _isLoading = true);
-    
-    try {
-      await _authService.loginWithEmail(_emailController.text, _passwordController.text);
-    } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Lỗi: $e')),
-      );
-    } finally {
-      if(mounted) setState(() => _isLoading = false);
-    }
-  }
-
-  void _handlGoogleLogin() async {
+  void _handleGoogleLogin() async {
     setState(() => _isLoading = true);
 
     try {
       await _authService.signInWithGoogle();
     } catch (e) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(content: Text('Lỗi: $e')),
-      );
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Lỗi: $e')),
+        );
+      }
     } finally {
-      if(mounted) setState(() => _isLoading = false);
+      if (mounted) setState(() => _isLoading = false);
     }
   }
 
@@ -52,29 +40,53 @@ class _LoginScreenState extends State<LoginScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            TextField(controller: _emailController, decoration: const InputDecoration(labelText: "Email")),
-            TextField(controller: _passwordController, decoration: const InputDecoration(labelText: "Mật khẩu"), obscureText: true),
+            TextField(
+              controller: _emailController,
+              decoration: const InputDecoration(labelText: "Email"),
+              keyboardType: TextInputType.emailAddress,
+            ),
+            TextField(
+              controller: _passwordController,
+              decoration: const InputDecoration(labelText: "Mật khẩu"),
+              obscureText: true,
+            ),
             const SizedBox(height: 20),
-            
-            if (_isLoading) const CircularProgressIndicator()
-            else Column(
-              children: [
-                ElevatedButton(
-                  onPressed: _handleLogin, 
-                  child: const Text("Đăng Nhập Email")
-                ),
-                const SizedBox(height: 10),
-                OutlinedButton.icon(
-                  icon: Image.network('https://upload.wikimedia.org/wikipedia/commons/c/c1/Google_%22G%22_logo.svg', height: 24),
-                  label: const Text("Tiếp tục với Google"),
-                  onPressed: _handlGoogleLogin,
-                ),
-                TextButton(
-                  onPressed: () => Navigator.push(context, MaterialPageRoute(builder: (_) => const RegisterScreen())), 
-                  child: const Text("Chưa có tài khoản? Đăng ký ngay")
-                )
-              ],
-            )
+            if (_isLoading)
+              const CircularProgressIndicator()
+            else
+              Column(
+                children: [
+                  OutlinedButton.icon(
+                    icon: Container(
+                      width: 24,
+                      height: 24,
+                      decoration: const BoxDecoration(
+                        color: Color(0xFF4285F4),
+                        shape: BoxShape.circle,
+                      ),
+                      child: const Center(
+                        child: Text(
+                          'G',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ),
+                    ),
+                    label: const Text("Tiếp tục với Google"),
+                    onPressed: _handleGoogleLogin,
+                  ),
+                  TextButton(
+                    onPressed: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(builder: (_) => const RegisterScreen()),
+                    ),
+                    child: const Text("Chưa có tài khoản? Đăng ký ngay"),
+                  ),
+                ],
+              ),
           ],
         ),
       ),

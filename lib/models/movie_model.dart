@@ -1,6 +1,7 @@
 class Movie {
   final int id;
   final String title;
+  final String originalTitle;
   final String overview;
   final String posterPath;
   final double voteAverage;
@@ -9,6 +10,7 @@ class Movie {
   Movie({
     required this.id,
     required this.title,
+    required this.originalTitle,
     required this.overview,
     required this.posterPath,
     required this.voteAverage,
@@ -19,6 +21,7 @@ class Movie {
     return Movie(
       id: json['id'] ?? 0,
       title: json['title'] ?? '',
+      originalTitle: json['original_title'] ?? '',
       overview: json['overview'] ?? '',
       posterPath: json['poster_path'] != null 
           ? 'https://image.tmdb.org/t/p/w500${json['poster_path']}' 

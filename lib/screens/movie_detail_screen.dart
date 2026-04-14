@@ -1,6 +1,8 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
-import 'package:movie_app/models/movie_model.dart';
+import 'package:cached_network_image/cached_network_image.dart';
+import '../models/movie_model.dart';
+import '../services/api_service.dart';
+import 'watch_movie_screen.dart';
 
 class MovieDetailScreen extends StatelessWidget {
   final Movie movie;
@@ -48,59 +50,112 @@ class MovieDetailScreen extends StatelessWidget {
 
       extendBodyBehindAppBar: true,
 
-      body: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: double.infinity,
-            height: 500,
-            child: CachedNetworkImage(
-              imageUrl: movie.posterPath,
-              fit: BoxFit.cover,
-              placeholder: (context, url) => Container(color: Colors.grey[900]),
+      body: SingleChildScrollView(
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              width: double.infinity,
+              height: 500,
+              child: CachedNetworkImage(
+                imageUrl: movie.posterPath,
+                fit: BoxFit.cover,
+                placeholder: (context, url) => Container(color: Colors.grey[900]),
               ),
-          ),
-
-          Padding(
-            padding: const EdgeInsets.all(16.0),
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  movie.title,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 28,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 12),
-
-                _buildStarRating(movie.voteAverage),
-                const SizedBox(height: 20),
-
-                const Text(
-                  "Nội dung phim",
-                  style: TextStyle(
-                    color: Colors.white70,
-                    fontSize: 18,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  movie.overview.isEmpty ? "" : movie.overview,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 16,
-                    height: 1.5,
-                  ),
-                ),
-                const SizedBox(height: 40),
-              ],
             ),
-          )
-        ],
+
+            Padding(
+              padding: const EdgeInsets.all(16.0),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    movie.title,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 28,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+
+                  _buildStarRating(movie.voteAverage),
+                  const SizedBox(height: 20),
+
+                  SizedBox(
+                    width: double.infinity,
+                    height: 50,
+                    child: ElevatedButton.icon(
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.red,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                      ),
+                      icon: const Icon(Icons.play_circle_fill, size: 28),
+                      label: const Text("XEM PHIM NGAY", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                      onPressed: () async {
+                        showDialog(
+                          context: context,
+                          barrierDismissible: false,
+                          builder: (context) => const Center(child: CircularProgressIndicator(color: Colors.red)),
+                        );
+
+                        String? realVideoUrl = await ApiService().getMovieStreamLink(
+                          movie.title,
+                          movie.originalTitle, 
+                        );
+                        
+                        if (context.mounted) Navigator.pop(context);
+
+                        if (realVideoUrl != null && context.mounted) {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => WatchMovieScreen(
+                                movieTitle: movie.title,
+                                videoUrl: realVideoUrl,
+                              ),
+                            ),
+                          );
+                        } else {
+                          if (context.mounted) {
+                            ScaffoldMessenger.of(context).showSnackBar(
+                              SnackBar(
+                                content: Text("Không có dữ liệu chiếu cho phim này trên server miễn phí."),
+                                backgroundColor: Colors.red,
+                                duration: const Duration(seconds: 3),
+                              ),
+                            );
+                          }
+                        }
+                      },
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+
+                  const Text(
+                    "Nội dung phim",
+                    style: TextStyle(
+                      color: Colors.white70,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    movie.overview.isEmpty ? "Đang cập nhật nội dung..." : movie.overview,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 16,
+                      height: 1.5,
+                    ),
+                  ),
+                  const SizedBox(height: 40),
+                ],
+              ),
+            )
+          ],
+        ),
       ),
     );
   }
