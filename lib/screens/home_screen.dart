@@ -1,9 +1,8 @@
-import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
-import 'package:movie_app/models/movie_model.dart';
-import 'package:movie_app/screens/movie_detail_screen.dart';
-import 'package:movie_app/services/api_service.dart';
-import 'package:movie_app/services/auth_service.dart';
+import '../models/movie_model.dart';
+import '../services/api_service.dart';
+import 'movie_detail_screen.dart';
+import 'category_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -18,68 +17,140 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black, 
+      backgroundColor: const Color(0xFF15141F),
       appBar: AppBar(
-        title: const Text("Phim Đang Hot", style: TextStyle(color: Colors.red, fontWeight: FontWeight.bold)),
-        backgroundColor: Colors.black,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.logout, color: Colors.white),
-            onPressed: () async => await AuthService().signOut(),
-          )
-        ],
+        backgroundColor: Colors.transparent,
+        elevation: 0,
+        title: const Text(
+          'Rạp Phim',
+          style: TextStyle(
+            color: Colors.redAccent,
+            fontSize: 24,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
       ),
-      body: FutureBuilder<List<Movie>>(
-        future: _apiService.getPopularMovies(),
-
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator(color: Colors.red));
-          }
-
-          if (snapshot.hasError || !snapshot.hasData || snapshot.data!.isEmpty) {
-            return const Center(child: Text("Không thể tải danh sách phim", style: TextStyle(color: Colors.white)));
-          }
-
-          final movies = snapshot.data!;
-          
-          return GridView.builder(
-            padding: const EdgeInsets.all(8),
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,           
-              childAspectRatio: 0.65,     
-              crossAxisSpacing: 10,
-              mainAxisSpacing: 10,
+      body: SingleChildScrollView(
+        child: Column(
+          children: [
+            _buildMovieCategory(context, "🔥 Phim Hot", "popular"),
+            _buildMovieCategory(context, "🍿 Phim Mới", "now_playing"),
+            _buildMovieCategory(
+              context,
+              "⭐ Phim Được Đánh Giá Cao",
+              "top_rated",
             ),
+            _buildMovieCategory(context, "Phim Hoạt hình", "animation"),
+            _buildMovieCategory(context, "Phim Hành Động", "action"),
+            _buildMovieCategory(context, "Phim Hài Hước", "comedy"),
+            _buildMovieCategory(context, "Phim Kinh Dị", "horror"),
+            _buildMovieCategory(context, "Phim Khoa Học Viễn Tưởng", "scifi"),
+            _buildMovieCategory(context, "Phim Lãng Mạn", "romance"),
+            _buildMovieCategory(context, "Phim Tài Liệu", "documentary"),
 
-            itemCount: movies.length,
-          
-            itemBuilder: (context, index) {
-              final movie = movies[index];
-                return GestureDetector(
-                onTap: () {
+            const SizedBox(height: 30),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMovieCategory(BuildContext context, String title, String type) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 16.0, vertical: 8.0),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Text(
+                title,
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              TextButton(
+                onPressed: () {
                   Navigator.push(
                     context,
                     MaterialPageRoute(
-                      builder: (context) => MovieDetailScreen(movie: movie),
+                      builder: (context) =>
+                          CategoryScreen(title: title, type: type),
                     ),
                   );
                 },
-                
-                child: ClipRRect(
-                  borderRadius: BorderRadius.circular(10),
-                  child: CachedNetworkImage(
-                    imageUrl: movie.posterPath,
-                    fit: BoxFit.cover,
-                    placeholder: (context, url) => Container(color: Colors.grey[800]),
-                    errorWidget: (context, url, error) => const Icon(Icons.error),
+                child: const Text(
+                  "Xem tất cả",
+                  style: TextStyle(color: Colors.redAccent),
+                ),
+              ),
+            ],
+          ),
+        ),
+        SizedBox(
+          height: 220,
+          child: FutureBuilder<List<Movie>>(
+            future: _apiService.getMovies(type, page: 1),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(
+                  child: CircularProgressIndicator(color: Colors.red),
+                );
+              } else if (snapshot.hasError) {
+                return const Center(
+                  child: Text(
+                    "Lỗi tải dữ liệu",
+                    style: TextStyle(color: Colors.white),
                   ),
-                )
+                );
+              } else if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                return const Center(
+                  child: Text(
+                    "Chưa có phim",
+                    style: TextStyle(color: Colors.white),
+                  ),
+                );
+              }
+
+              final allMovies = snapshot.data!;
+              final displayMovies = allMovies.length > 6
+                  ? allMovies.sublist(0, 6)
+                  : allMovies;
+
+              return ListView.builder(
+                scrollDirection: Axis.horizontal,
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                itemCount: displayMovies.length,
+                itemBuilder: (context, index) {
+                  final movie = displayMovies[index];
+                  return GestureDetector(
+                    onTap: () => Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => MovieDetailScreen(movie: movie),
+                      ),
+                    ),
+                    child: Container(
+                      width: 130,
+                      margin: const EdgeInsets.only(right: 16),
+                      child: ClipRRect(
+                        borderRadius: BorderRadius.circular(12),
+                        child: Image.network(
+                          movie.posterPath,
+                          fit: BoxFit.cover,
+                        ),
+                      ),
+                    ),
+                  );
+                },
               );
             },
-          );
-        },
-      ),
+          ),
+        ),
+      ],
     );
   }
 }

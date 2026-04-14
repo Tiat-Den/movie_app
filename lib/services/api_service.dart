@@ -1,99 +1,58 @@
 import 'dart:convert';
+import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
 import '../models/movie_model.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 class ApiService {
   static final String _apiKey = dotenv.env['TMDB_API_KEY'] ?? '';
-  static const String _baseUrl = 'https://api.themoviedb.org/3';
+    final String _baseUrl = 'https://api.themoviedb.org/3';
 
-  Future<List<Movie>> getPopularMovies() async {
-    final url = Uri.parse('$_baseUrl/movie/popular?api_key=$_apiKey&language=vi-VN');
+  Future<List<Movie>> getMovies(String type, {int page = 1}) async {
+    String endpoint = '';
 
-    try {
-      final response = await http.get(url);
+    switch (type) {
+      case 'animation': endpoint = '/discover/movie?with_genres=16'; break;
+      case 'action': endpoint = '/discover/movie?with_genres=28'; break;
+      case 'comedy': endpoint = '/discover/movie?with_genres=35'; break;
+      case 'horror': endpoint = '/discover/movie?with_genres=27'; break;
+      case 'scifi': endpoint = '/discover/movie?with_genres=878'; break;
+      case 'romance': endpoint = '/discover/movie?with_genres=10749'; break;
+      case 'documentary': endpoint = '/discover/movie?with_genres=99'; break;
+      default: endpoint = '/movie/$type'; 
+    }
 
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        final List moviesData = data['results'];
-        return moviesData.map((movieJson) => Movie.fromJson(movieJson)).toList();
-      } else {
-        throw Exception('lỗi : ${response.statusCode}');
-      }
-    } catch (e) {
-      throw Exception('lỗi : $e');
+    final String separator = endpoint.contains('?') ? '&' : '?';
+    final url = Uri.parse('$_baseUrl$endpoint${separator}api_key=$_apiKey&language=vi-VN&page=$page');
+
+    final response = await http.get(url);
+    if (response.statusCode == 200) {
+      final data = json.decode(response.body);
+      return (data['results'] as List).map((m) => Movie.fromJson(m)).toList();
+    } else {
+      throw Exception('Lỗi API TMDB: ${response.statusCode}');
     }
   }
 
- Future<String?> getMovieStreamLink(String movieTitle, String originalTitle) async {
-    // 1. Dọn dẹp từ khóa (Cắt bỏ phần sau dấu hai chấm để dễ tìm hơn)
-    String cleanTitle = movieTitle.split(':').first.trim();
-    String cleanOriginal = originalTitle.split(':').first.trim();
+  Future<String?> getMovieStreamLink(String title, String original) async {
+    String cleanTitle = title.split(':').first.trim();
+    List<String> keywords = [title, original, cleanTitle];
 
-    // 2. Lên danh sách các tên cần thử (Loại bỏ những tên trùng nhau để đỡ mất công tìm)
-    final List<String> titlesToTry = [
-      movieTitle,
-      if (originalTitle.isNotEmpty && originalTitle != movieTitle) originalTitle,
-      if (cleanTitle != movieTitle) cleanTitle,
-      if (cleanOriginal.isNotEmpty && cleanOriginal != originalTitle && cleanOriginal != cleanTitle) cleanOriginal,
-    ];
-
-    print("--- BẮT ĐẦU ĐI TÌM LINK PHIM ---");
-    print("Danh sách từ khóa sẽ thử: $titlesToTry");
-
-    for (final title in titlesToTry) {
-      if (title.isEmpty) continue;
-
-      final result = await _searchStreamLink(title);
-      if (result != null) {
-        return result; 
-      }
-    }
-    
-    print("KKPhim không có phim này!");
-    return null; 
-  }
-
-  Future<String?> _searchStreamLink(String keyword) async {
-    print("🚀 Đang tìm kiếm: '$keyword'");
-    
-    try {
-      final encodedKeyword = Uri.encodeComponent(keyword);
-      final searchUrl = Uri.parse('https://phimapi.com/v1/api/tim-kiem?keyword=$encodedKeyword&limit=1');
-      final searchResponse = await http.get(searchUrl);
-
-      if (searchResponse.statusCode == 200) {
-        final searchData = json.decode(searchResponse.body);
-        final items = searchData['data']['items'];
-
-        if (items != null && items.isNotEmpty) {
-          final String slug = items[0]['slug'];
-          print("✅ Đã thấy phim (Slug: $slug). Đang lấy link m3u8...");
-
-          final detailUrl = Uri.parse('https://phimapi.com/phim/$slug');
-          final detailResponse = await http.get(detailUrl);
-
-          if (detailResponse.statusCode == 200) {
-            final detailData = json.decode(detailResponse.body);
-            final episodes = detailData['episodes'];
-            
-            if (episodes != null && episodes.isNotEmpty) {
-              final serverData = episodes[0]['server_data'];
-              if (serverData != null && serverData.isNotEmpty) {
-                String finalLink = serverData[0]['link_m3u8'];
-                print("🎯 THÀNH CÔNG LẤY ĐƯỢC LINK: $finalLink");
-                return finalLink; 
-              }
-            }
+    for (var k in keywords) {
+      if (k.isEmpty) continue;
+      try {
+        final searchUrl = Uri.parse('https://phimapi.com/v1/api/tim-kiem?keyword=${Uri.encodeComponent(k)}&limit=1');
+        final res = await http.get(searchUrl);
+        if (res.statusCode == 200) {
+          final data = json.decode(res.body);
+          final items = data['data']['items'];
+          if (items != null && items.isNotEmpty) {
+            final detailRes = await http.get(Uri.parse('https://phimapi.com/phim/${items[0]['slug']}'));
+            final detailData = json.decode(detailRes.body);
+            return detailData['episodes'][0]['server_data'][0]['link_m3u8'];
           }
-        } else {
-          print("❌ KKPhim không có phim nào tên là '$keyword'");
         }
-      }
-    } catch (e) {
-      print("⚠️ Lỗi mạng khi tìm từ khóa '$keyword': $e");
+      } catch (e) { print(e); }
     }
-    
-    return null; // Trả về null nếu hàm phụ này thất bại
+    return null;
   }
 }
