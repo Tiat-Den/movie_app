@@ -20,7 +20,9 @@ class Movie {
       id: json['id'] ?? 0,
       title: json['title'] ?? '',
       overview: json['overview'] ?? '',
-      posterPath: json['poster_path'] ?? '',
+      posterPath: json['poster_path'] != null 
+          ? 'https://image.tmdb.org/t/p/w500${json['poster_path']}' 
+          : 'https://via.placeholder.com/500x750?text=No+Image',      
       voteAverage: (json['vote_average'] ?? 0)?.toDouble(),
       releaseDate: json['release_date'] ?? '',
     );
