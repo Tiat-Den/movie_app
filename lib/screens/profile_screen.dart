@@ -11,8 +11,6 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
   final AuthService _authService = AuthService();
-  final _passwordController = TextEditingController();
-  bool _isObscure = true;
   User? currentUser;
 
   @override
@@ -290,8 +288,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                           );
                         }
                       } finally {
-                        if (context.mounted)
+                        if (context.mounted) {
                           setDialogState(() => isLoading = false);
+                        }
                       }
                     },
               style: ElevatedButton.styleFrom(

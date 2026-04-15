@@ -60,7 +60,8 @@ class MovieDetailScreen extends StatelessWidget {
               child: CachedNetworkImage(
                 imageUrl: movie.posterPath,
                 fit: BoxFit.cover,
-                placeholder: (context, url) => Container(color: Colors.grey[900]),
+                placeholder: (context, url) =>
+                    Container(color: Colors.grey[900]),
               ),
             ),
 
@@ -89,22 +90,34 @@ class MovieDetailScreen extends StatelessWidget {
                       style: ElevatedButton.styleFrom(
                         backgroundColor: Colors.red,
                         foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
                       ),
                       icon: const Icon(Icons.play_circle_fill, size: 28),
-                      label: const Text("XEM PHIM NGAY", style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold)),
+                      label: const Text(
+                        "XEM PHIM NGAY",
+                        style: TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
                       onPressed: () async {
                         showDialog(
                           context: context,
                           barrierDismissible: false,
-                          builder: (context) => const Center(child: CircularProgressIndicator(color: Colors.red)),
+                          builder: (context) => const Center(
+                            child: CircularProgressIndicator(color: Colors.red),
+                          ),
                         );
 
-                        String? realVideoUrl = await ApiService().getMovieStreamLink(
-                          movie.title,
-                          movie.originalTitle, 
-                        );
-                        
+                        String? realVideoUrl = await ApiService()
+                            .getMovieStreamLink(
+                              movie.id,
+                              movie.title,
+                              movie.originalTitle,
+                            );
+
                         if (context.mounted) Navigator.pop(context);
 
                         if (realVideoUrl != null && context.mounted) {
@@ -112,8 +125,9 @@ class MovieDetailScreen extends StatelessWidget {
                             context,
                             MaterialPageRoute(
                               builder: (context) => WatchMovieScreen(
-                                movieTitle: movie.title,
+                                movie: movie,
                                 videoUrl: realVideoUrl,
+                                isOffline: false,
                               ),
                             ),
                           );
@@ -121,7 +135,9 @@ class MovieDetailScreen extends StatelessWidget {
                           if (context.mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(
                               SnackBar(
-                                content: Text("Không có dữ liệu chiếu cho phim này trên server miễn phí."),
+                                content: Text(
+                                  "Không có dữ liệu chiếu cho phim này trên server miễn phí.",
+                                ),
                                 backgroundColor: Colors.red,
                                 duration: const Duration(seconds: 3),
                               ),
@@ -143,7 +159,9 @@ class MovieDetailScreen extends StatelessWidget {
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    movie.overview.isEmpty ? "Đang cập nhật nội dung..." : movie.overview,
+                    movie.overview.isEmpty
+                        ? "Đang cập nhật nội dung..."
+                        : movie.overview,
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 16,
@@ -153,7 +171,7 @@ class MovieDetailScreen extends StatelessWidget {
                   const SizedBox(height: 40),
                 ],
               ),
-            )
+            ),
           ],
         ),
       ),

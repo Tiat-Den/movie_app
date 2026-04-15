@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:movie_app/screens/downloaded_movies_screen.dart';
 import '../models/movie_model.dart';
 import '../services/api_service.dart';
 import 'movie_detail_screen.dart';
@@ -31,26 +32,69 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ),
         actions: [
-          IconButton(
-            icon: const Icon(
-              Icons.account_circle,
-              color: Colors.white,
-              size: 32,
+          // --- NÚT AVATAR CÓ DROPDOWN ---
+          PopupMenuButton<String>(
+            // Icon hiển thị trên AppBar
+            icon: const CircleAvatar(
+              backgroundColor: Colors.white24,
+              child: Icon(Icons.person, color: Colors.white),
             ),
-            onPressed: () {
-              Navigator.push(
-                context,
-                MaterialPageRoute(builder: (context) => const ProfileScreen()),
-              );
+            // Màu nền của cái menu xổ xuống
+            color: const Color(0xFF211F30),
+            // Chỉnh khoảng cách để menu tụt xuống một chút, không che mất cái Avatar
+            offset: const Offset(0, 50),
+            // Xử lý sự kiện khi chọn 1 dòng
+            onSelected: (String value) {
+              if (value == 'profile') {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const ProfileScreen(),
+                  ),
+                );
+              } else if (value == 'downloads') {
+                // Chuyển sang màn hình Phim đã tải mình vừa làm
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const DownloadedMoviesScreen(),
+                  ),
+                );
+              }
             },
+            // Các mục con bên trong Menu
+            itemBuilder: (BuildContext context) => [
+              const PopupMenuItem<String>(
+                value: 'profile',
+                child: Row(
+                  children: [
+                    Icon(Icons.account_circle, color: Colors.white),
+                    SizedBox(width: 10),
+                    Text("Tài khoản", style: TextStyle(color: Colors.white)),
+                  ],
+                ),
+              ),
+              const PopupMenuItem<String>(
+                value: 'downloads',
+                child: Row(
+                  children: [
+                    Icon(Icons.download_for_offline, color: Colors.white),
+                    SizedBox(width: 10),
+                    Text("Phim đã tải", style: TextStyle(color: Colors.white)),
+                  ],
+                ),
+              ),
+            ],
           ),
-          const SizedBox(width: 8),
+
+          // --- NÚT ĐĂNG XUẤT (Giữ nguyên của bạn) ---
           IconButton(
-            icon: const Icon(Icons.logout, color: Colors.white70, size: 26),
+            icon: const Icon(Icons.logout, color: Colors.white),
             onPressed: () {
-              Navigator.of(context).popUntil((route) => route.isFirst);
+              // Code đăng xuất của bạn
             },
           ),
+          const SizedBox(width: 10), // Cách lề phải một xíu cho đẹp
         ],
       ),
       body: SingleChildScrollView(
