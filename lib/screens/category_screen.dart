@@ -35,7 +35,6 @@ class _CategoryScreenState extends State<CategoryScreen> {
       body: SafeArea(
         child: Column(
           children: [
-            // LƯỚI PHIM
             Expanded(
               child: FutureBuilder(
                 future: _api.getMovies(widget.type, page: _page),
