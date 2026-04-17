@@ -22,9 +22,9 @@ class _LoginScreenState extends State<LoginScreen> {
       await _authService.signInWithGoogle();
     } catch (e) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Lỗi: $e')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(SnackBar(content: Text('Lỗi: $e')));
       }
     } finally {
       if (mounted) setState(() => _isLoading = false);

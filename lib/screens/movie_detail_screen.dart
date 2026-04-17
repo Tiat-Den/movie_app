@@ -1,26 +1,93 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:http/http.dart' as http;
+import 'dart:convert';
 import '../models/movie_model.dart';
 import '../services/api_service.dart';
 import 'watch_movie_screen.dart';
 
-class MovieDetailScreen extends StatelessWidget {
+class MovieDetailScreen extends StatefulWidget {
   final Movie movie;
 
   const MovieDetailScreen({super.key, required this.movie});
 
+  @override
+  State<MovieDetailScreen> createState() => _MovieDetailScreenState();
+}
+
+class _MovieDetailScreenState extends State<MovieDetailScreen> {
+  List<dynamic>? _episodes; // Lưu danh sách tập phim thực tế
+  String _totalEpisodesFromApi =
+      "?"; // Lưu tổng số tập dự kiến (VD: 12, 24, Full)
+  bool _isLoadingEpisodes = false;
+
+  @override
+  void initState() {
+    super.initState();
+    // Nếu là phim bộ thì mới đi tìm thông tin tập
+    if (widget.movie.isTv) {
+      _fetchEpisodeInfo();
+    }
+  }
+
+  // Hàm lấy thông tin tập phim từ phimapi.com
+  Future<void> _fetchEpisodeInfo() async {
+    setState(() => _isLoadingEpisodes = true);
+
+    // Lấy phần tên chính của phim để search slug
+    String cleanTitle = widget.movie.title.split(':').first.trim();
+
+    try {
+      final searchUrl = Uri.parse(
+        'https://phimapi.com/v1/api/tim-kiem?keyword=${Uri.encodeComponent(cleanTitle)}&limit=1',
+      );
+      final res = await http.get(searchUrl);
+
+      if (res.statusCode == 200) {
+        final searchData = json.decode(res.body);
+        final items = searchData['data']['items'];
+
+        if (items != null && items.isNotEmpty) {
+          final detailRes = await http.get(
+            Uri.parse('https://phimapi.com/phim/${items[0]['slug']}'),
+          );
+
+          if (detailRes.statusCode == 200) {
+            final detailData = json.decode(detailRes.body);
+
+            if (mounted) {
+              setState(() {
+                // 1. Lấy danh sách các tập đã có link (để map sang màn hình xem phim)
+                _episodes = detailData['episodes'][0]['server_data'];
+
+                // 2. Lấy tổng số tập dự kiến từ thông tin phim
+                _totalEpisodesFromApi =
+                    detailData['movie']['episode_total'] ?? "?";
+
+                _isLoadingEpisodes = false;
+              });
+            }
+          }
+        }
+      }
+    } catch (e) {
+      debugPrint("Lỗi lấy thông tin tập: $e");
+      if (mounted) setState(() => _isLoadingEpisodes = false);
+    }
+  }
+
   Widget _buildStarRating(double rating) {
     int starCount = (rating / 2).round();
     List<Widget> stars = [];
-
     for (int i = 1; i <= 5; i++) {
-      if (i <= starCount) {
-        stars.add(const Icon(Icons.star, color: Colors.amber, size: 24));
-      } else {
-        stars.add(const Icon(Icons.star_border, color: Colors.amber, size: 24));
-      }
+      stars.add(
+        Icon(
+          i <= starCount ? Icons.star : Icons.star_border,
+          color: Colors.amber,
+          size: 24,
+        ),
+      );
     }
-
     return Row(
       children: [
         ...stars,
@@ -41,27 +108,26 @@ class MovieDetailScreen extends StatelessWidget {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.black,
-
       appBar: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
         iconTheme: const IconThemeData(color: Colors.white),
       ),
-
       extendBodyBehindAppBar: true,
-
       body: SingleChildScrollView(
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
+            // Banner/Poster Phim
             SizedBox(
               width: double.infinity,
               height: 500,
               child: CachedNetworkImage(
-                imageUrl: movie.posterPath,
+                imageUrl: widget.movie.posterPath,
                 fit: BoxFit.cover,
                 placeholder: (context, url) =>
                     Container(color: Colors.grey[900]),
+                errorWidget: (context, url, error) => const Icon(Icons.error),
               ),
             ),
 
@@ -71,18 +137,48 @@ class MovieDetailScreen extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Text(
-                    movie.title,
+                    widget.movie.title,
                     style: const TextStyle(
                       color: Colors.white,
                       fontSize: 28,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
-                  const SizedBox(height: 12),
+                  const SizedBox(height: 8),
 
-                  _buildStarRating(movie.voteAverage),
+                  // 🟢 HIỂN THỊ TRẠNG THÁI SỐ TẬP (CHỈ PHIM BỘ)
+                  if (widget.movie.isTv)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 10,
+                          vertical: 6,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.blueAccent.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(8),
+                          border: Border.all(
+                            color: Colors.blueAccent.withOpacity(0.3),
+                          ),
+                        ),
+                        child: Text(
+                          _isLoadingEpisodes
+                              ? "Đang tải số tập..."
+                              : "Số tập: ${_episodes?.length ?? '0'} / $_totalEpisodesFromApi tập",
+                          style: const TextStyle(
+                            color: Colors.blueAccent,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 13,
+                          ),
+                        ),
+                      ),
+                    ),
+
+                  _buildStarRating(widget.movie.voteAverage),
                   const SizedBox(height: 20),
 
+                  // NÚT XEM PHIM
                   SizedBox(
                     width: double.infinity,
                     height: 50,
@@ -103,6 +199,7 @@ class MovieDetailScreen extends StatelessWidget {
                         ),
                       ),
                       onPressed: () async {
+                        // Hiện loading dialog trong khi lấy link stream
                         showDialog(
                           context: context,
                           barrierDismissible: false,
@@ -113,33 +210,35 @@ class MovieDetailScreen extends StatelessWidget {
 
                         String? realVideoUrl = await ApiService()
                             .getMovieStreamLink(
-                              movie.id,
-                              movie.title,
-                              movie.originalTitle,
+                              widget.movie.id,
+                              widget.movie.title,
+                              widget.movie.originalTitle,
+                              isTv: widget.movie.isTv,
                             );
 
-                        if (context.mounted) Navigator.pop(context);
+                        if (mounted)
+                          Navigator.pop(context); // Tắt loading dialog
 
-                        if (realVideoUrl != null && context.mounted) {
+                        if (realVideoUrl != null && mounted) {
                           Navigator.push(
                             context,
                             MaterialPageRoute(
                               builder: (context) => WatchMovieScreen(
-                                movie: movie,
+                                movie: widget.movie,
                                 videoUrl: realVideoUrl,
                                 isOffline: false,
+                                episodes: _episodes, // Truyền list tập sang
                               ),
                             ),
                           );
                         } else {
-                          if (context.mounted) {
+                          if (mounted) {
                             ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
+                              const SnackBar(
                                 content: Text(
-                                  "Không có dữ liệu chiếu cho phim này trên server miễn phí.",
+                                  "Không tìm thấy link phim phù hợp!",
                                 ),
                                 backgroundColor: Colors.red,
-                                duration: const Duration(seconds: 3),
                               ),
                             );
                           }
@@ -147,25 +246,25 @@ class MovieDetailScreen extends StatelessWidget {
                       },
                     ),
                   ),
-                  const SizedBox(height: 20),
 
+                  const SizedBox(height: 25),
                   const Text(
                     "Nội dung phim",
                     style: TextStyle(
-                      color: Colors.white70,
+                      color: Colors.white,
                       fontSize: 18,
                       fontWeight: FontWeight.bold,
                     ),
                   ),
                   const SizedBox(height: 8),
                   Text(
-                    movie.overview.isEmpty
+                    widget.movie.overview.isEmpty
                         ? "Đang cập nhật nội dung..."
-                        : movie.overview,
+                        : widget.movie.overview,
                     style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 16,
-                      height: 1.5,
+                      color: Colors.white70,
+                      fontSize: 15,
+                      height: 1.6,
                     ),
                   ),
                   const SizedBox(height: 40),

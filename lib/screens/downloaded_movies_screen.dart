@@ -198,8 +198,10 @@ class _DownloadedMoviesScreenState extends State<DownloadedMoviesScreen> {
                 MaterialPageRoute(
                   builder: (context) => WatchMovieScreen(
                     movie: Movie(
+                      isTv: false,
                       id: 0,
                       title: fileName,
+                      totalEpisodes: 0,
                       overview:
                           "Bạn đang xem phim ở chế độ ngoại tuyến. Một số tính năng như bình luận sẽ bị tạm khóa.",
                       posterPath: "",
