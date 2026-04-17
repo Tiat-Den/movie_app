@@ -1,4 +1,4 @@
-import 'package:agora_rtc_engine/agora_rtc_engine.dart';
+﻿import 'package:agora_rtc_engine/agora_rtc_engine.dart';
 import 'package:flutter/material.dart';
 import 'package:movie_app/models/movie_model.dart';
 import 'package:movie_app/services/api_service.dart';
@@ -37,7 +37,7 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
   late RtcEngine _engine;
   bool _isMicOn = false;
   bool _isCamOn = false;
-  List<int> _remoteUsers = [];
+  final List<int> _remoteUsers = [];
 
   // --- Logic Sync ---
   StreamSubscription? _roomSubscription;
@@ -54,7 +54,6 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
   // --- Guard flags ---
   bool _isRoomActive = true;
   int _lastSyncMs = 0;
-
 
   @override
   void initState() {
@@ -73,10 +72,7 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
 
     _engine.registerEventHandler(
       RtcEngineEventHandler(
-        onJoinChannelSuccess: (
-          RtcConnection connection,
-          int elapsed,
-        ) {
+        onJoinChannelSuccess: (RtcConnection connection, int elapsed) {
           final uid = connection.localUid ?? 0;
           // Lưu thông tin bản thân vào Firestore members
           final user = FirebaseAuth.instance.currentUser;
@@ -193,7 +189,10 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
               episodeIdx,
             );
           } else if (!isTv && _episodes.isNotEmpty) {
-            setState(() { _episodes = []; _currentEpisodeIndex = 0; });
+            setState(() {
+              _episodes = [];
+              _currentEpisodeIndex = 0;
+            });
           }
 
           if (!_isHost &&
@@ -233,14 +232,18 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
     if (now - _lastSyncMs < 1000) return;
     _lastSyncMs = now;
 
-    _firestore.collection('rooms').doc(widget.roomId).update({
-      'isPlaying': _videoController!.value.isPlaying,
-      'currentPosition': _videoController!.value.position.inMilliseconds,
-    }).catchError((e) {
-      // Room u0111u00e3 bu1ecb xu00f3a � tu1eaft flag u0111u1ec3 ngu0103n spam
-      _isRoomActive = false;
-      _videoController?.removeListener(_hostVideoListener);
-    });
+    _firestore
+        .collection('rooms')
+        .doc(widget.roomId)
+        .update({
+          'isPlaying': _videoController!.value.isPlaying,
+          'currentPosition': _videoController!.value.position.inMilliseconds,
+        })
+        .catchError((e) {
+          // Room u0111u00e3 bu1ecb xu00f3a � tu1eaft flag u0111u1ec3 ngu0103n spam
+          _isRoomActive = false;
+          _videoController?.removeListener(_hostVideoListener);
+        });
   }
 
   void _syncVideoWithFirebase(Room room) {
@@ -260,14 +263,18 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
 
   // ─── EPISODE METHODS ──────────────────────────────────────────────────────
 
-  Future<void> _loadEpisodes(int movieId, String title, int initialIndex) async {
+  Future<void> _loadEpisodes(
+    int movieId,
+    String title,
+    int initialIndex,
+  ) async {
     if (!mounted) return;
-    setState(() { _loadingEpisodes = true; _episodes = []; });
+    setState(() {
+      _loadingEpisodes = true;
+      _episodes = [];
+    });
     try {
-      final eps = await _api.getEpisodeList(
-        movieId, title, '',
-        isTv: true,
-      );
+      final eps = await _api.getEpisodeList(movieId, title, '', isTv: true);
       if (!mounted) return;
       setState(() {
         _episodes = eps;
@@ -291,15 +298,16 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
     // Lấy link từ server_data (cùng cấu trúc với WatchMovieScreen)
     if (ep['link_m3u8'] != null && ep['link_m3u8'].toString().isNotEmpty) {
       newUrl = ep['link_m3u8'].toString();
-    } else if (ep['server_data'] != null && (ep['server_data'] as List).isNotEmpty) {
+    } else if (ep['server_data'] != null &&
+        (ep['server_data'] as List).isNotEmpty) {
       newUrl = ep['server_data'][0]['link_m3u8'].toString();
     }
 
     if (newUrl == null) {
       if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(content: Text('Tập này chưa có link!')),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text('Tập này chưa có link!')));
       }
       return;
     }
@@ -343,110 +351,110 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
         if (!didPop) _leaveRoom();
       },
       child: Scaffold(
-      backgroundColor: const Color(0xFF15141F),
-      resizeToAvoidBottomInset: true,
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white),
-          onPressed: () => _leaveRoom(),
-        ),
-        title: Text(
-          _roomName.isEmpty ? "Đang tải..." : "$_roomName",
-          style: TextStyle(color: Colors.white),
-        ),
-        centerTitle: false,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.share, color: Colors.blueAccent),
-            onPressed: () =>
-                Share.share("Cùng xem phim nhé! Mã phòng: ${widget.roomId}"),
+        backgroundColor: const Color(0xFF15141F),
+        resizeToAvoidBottomInset: true,
+        appBar: AppBar(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back_ios_new, color: Colors.white),
+            onPressed: () => _leaveRoom(),
           ),
-          if (_isHost)
-            const Padding(
-              padding: EdgeInsets.symmetric(horizontal: 8),
-              child: Chip(
-                label: Text("HOST"),
-                backgroundColor: Colors.redAccent,
-              ),
+          title: Text(
+            _roomName.isEmpty ? "Đang tải..." : "$_roomName",
+            style: TextStyle(color: Colors.white),
+          ),
+          centerTitle: false,
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.share, color: Colors.blueAccent),
+              onPressed: () =>
+                  Share.share("Cùng xem phim nhé! Mã phòng: ${widget.roomId}"),
             ),
-        ],
-      ),
-      body: SafeArea(
-        top: false,
-        child: Column(
-          children: [
-            // VÙNG CUỘN: tất cả nội dung
-            Expanded(
-              child: CustomScrollView(
-                controller: _scrollController,
-                slivers: [
-                  // VIDEO PLAYER
-                  SliverToBoxAdapter(
-                    child: AspectRatio(
-                      aspectRatio: 16 / 9,
-                      child: _chewieController != null
-                          ? Chewie(controller: _chewieController!)
-                          : const Center(
-                              child: CircularProgressIndicator(
-                                color: Colors.red,
+            if (_isHost)
+              const Padding(
+                padding: EdgeInsets.symmetric(horizontal: 8),
+                child: Chip(
+                  label: Text("HOST"),
+                  backgroundColor: Colors.redAccent,
+                ),
+              ),
+          ],
+        ),
+        body: SafeArea(
+          top: false,
+          child: Column(
+            children: [
+              // VÙNG CUỘN: tất cả nội dung
+              Expanded(
+                child: CustomScrollView(
+                  controller: _scrollController,
+                  slivers: [
+                    // VIDEO PLAYER
+                    SliverToBoxAdapter(
+                      child: AspectRatio(
+                        aspectRatio: 16 / 9,
+                        child: _chewieController != null
+                            ? Chewie(controller: _chewieController!)
+                            : const Center(
+                                child: CircularProgressIndicator(
+                                  color: Colors.red,
+                                ),
                               ),
-                            ),
+                      ),
                     ),
-                  ),
 
-                  // TÊN PHIM
-                  SliverToBoxAdapter(child: _buildMovieTitleHeader()),
+                    // TÊN PHIM
+                    SliverToBoxAdapter(child: _buildMovieTitleHeader()),
 
-                  // DANH SÁCH TẬP (chỉ hiện khi phim bộ)
-                  if (_episodes.isNotEmpty || _loadingEpisodes)
-                    SliverToBoxAdapter(child: _buildEpisodeSection()),
+                    // DANH SÁCH TẬP (chỉ hiện khi phim bộ)
+                    if (_episodes.isNotEmpty || _loadingEpisodes)
+                      SliverToBoxAdapter(child: _buildEpisodeSection()),
 
-                  // PLAYLIST (ngay dưới tên phim)
-                  SliverToBoxAdapter(child: _buildPlaylistBar()),
+                    // PLAYLIST (ngay dưới tên phim)
+                    SliverToBoxAdapter(child: _buildPlaylistBar()),
 
-                  SliverToBoxAdapter(
-                    child: const Divider(color: Colors.white12, height: 1),
-                  ),
+                    SliverToBoxAdapter(
+                      child: const Divider(color: Colors.white12, height: 1),
+                    ),
 
-                  // AVATAR + NÚT MIC/CAM
-                  SliverToBoxAdapter(child: _buildParticipantAndControls()),
+                    // AVATAR + NÚT MIC/CAM
+                    SliverToBoxAdapter(child: _buildParticipantAndControls()),
 
-                  SliverToBoxAdapter(
-                    child: const Divider(color: Colors.white12, height: 1),
-                  ),
+                    SliverToBoxAdapter(
+                      child: const Divider(color: Colors.white12, height: 1),
+                    ),
 
-                  // NHÃN CHAT
-                  SliverToBoxAdapter(
-                    child: Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
-                      child: Text(
-                        "Tin nhắn",
-                        style: TextStyle(
-                          color: Colors.white54,
-                          fontSize: 12,
-                          fontWeight: FontWeight.w600,
-                          letterSpacing: 0.5,
+                    // NHÃN CHAT
+                    SliverToBoxAdapter(
+                      child: Padding(
+                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                        child: Text(
+                          "Tin nhắn",
+                          style: TextStyle(
+                            color: Colors.white54,
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            letterSpacing: 0.5,
+                          ),
                         ),
                       ),
                     ),
-                  ),
 
-                  // TIN NHẮN (inline)
-                  _buildChatMessages(),
+                    // TIN NHẮN (inline)
+                    _buildChatMessages(),
 
-                  const SliverToBoxAdapter(child: SizedBox(height: 12)),
-                ],
+                    const SliverToBoxAdapter(child: SizedBox(height: 12)),
+                  ],
+                ),
               ),
-            ),
 
-            // Ô NHẬP TIN (cố định dưới)
-            _buildInputArea(),
-          ],
+              // Ô NHẬP TIN (cố định dưới)
+              _buildInputArea(),
+            ],
+          ),
         ),
-      ),
-    ), // Scaffold
+      ), // Scaffold
     ); // PopScope
   } // build
 
@@ -458,7 +466,8 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
     return StreamBuilder<DocumentSnapshot>(
       stream: _firestore.collection('rooms').doc(widget.roomId).snapshots(),
       builder: (context, snapshot) {
-        if (!snapshot.hasData || !snapshot.data!.exists) return const SizedBox();
+        if (!snapshot.hasData || !snapshot.data!.exists)
+          return const SizedBox();
         final data = snapshot.data!.data() as Map<String, dynamic>;
         final title = data['movieTitle'] as String? ?? 'Đang tải...';
         final isTv = data['movieIsTv'] as bool? ?? false;
@@ -479,8 +488,7 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
                 maxLines: 1,
                 overflow: TextOverflow.ellipsis,
               ),
-              if (isTv) ...
-              [
+              if (isTv) ...[
                 const SizedBox(height: 4),
                 Row(
                   children: [
@@ -490,10 +498,10 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
                         vertical: 3,
                       ),
                       decoration: BoxDecoration(
-                        color: Colors.blueAccent.withOpacity(0.2),
+                        color: Colors.blueAccent.withValues(alpha: 0.2),
                         borderRadius: BorderRadius.circular(20),
                         border: Border.all(
-                          color: Colors.blueAccent.withOpacity(0.5),
+                          color: Colors.blueAccent.withValues(alpha: 0.5),
                           width: 1,
                         ),
                       ),
@@ -548,19 +556,18 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
                   letterSpacing: 0.5,
                 ),
               ),
-              if (_loadingEpisodes) ...
-              [
+              if (_loadingEpisodes) ...[
                 const SizedBox(width: 8),
                 const SizedBox(
-                  width: 12, height: 12,
+                  width: 12,
+                  height: 12,
                   child: CircularProgressIndicator(
                     strokeWidth: 1.5,
                     color: Colors.white38,
                   ),
                 ),
               ],
-              if (!_isHost && _episodes.isNotEmpty) ...
-              [
+              if (!_isHost && _episodes.isNotEmpty) ...[
                 const SizedBox(width: 6),
                 const Text(
                   '(chỉ host đổi tập)',
@@ -591,9 +598,15 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
                   final epName = _episodes[index]['filename']?.toString() ?? '';
                   // Lấy số tập: dùng filename nếu có, sử dụng index+1 nếu không
                   final label = epName.isNotEmpty
-                      ? epName.replaceAll(RegExp(r'[^0-9]'), '').replaceAll('', index == 0 ? '' : '')
+                      ? epName
+                            .replaceAll(RegExp(r'[^0-9]'), '')
+                            .replaceAll('', index == 0 ? '' : '')
                       : '${index + 1}';
-                  final displayLabel = label.isEmpty ? '${index + 1}' : label.length > 3 ? '${index + 1}' : label;
+                  final displayLabel = label.isEmpty
+                      ? '${index + 1}'
+                      : label.length > 3
+                      ? '${index + 1}'
+                      : label;
 
                   return GestureDetector(
                     onTap: _isHost ? () => _changeEpisode(index) : null,
@@ -604,14 +617,19 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
                       decoration: BoxDecoration(
                         color: isSelected
                             ? Colors.redAccent
-                            : Colors.white.withOpacity(0.08),
+                            : Colors.white.withValues(alpha: 0.08),
                         borderRadius: BorderRadius.circular(8),
                         border: Border.all(
                           color: isSelected ? Colors.red : Colors.white12,
                           width: isSelected ? 1.5 : 1,
                         ),
                         boxShadow: isSelected
-                            ? [BoxShadow(color: Colors.red.withOpacity(0.35), blurRadius: 6)]
+                            ? [
+                                BoxShadow(
+                                  color: Colors.red.withValues(alpha: 0.35),
+                                  blurRadius: 6,
+                                ),
+                              ]
                             : [],
                       ),
                       alignment: Alignment.center,
@@ -619,7 +637,9 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
                         displayLabel,
                         style: TextStyle(
                           color: isSelected ? Colors.white : Colors.white60,
-                          fontWeight: isSelected ? FontWeight.bold : FontWeight.normal,
+                          fontWeight: isSelected
+                              ? FontWeight.bold
+                              : FontWeight.normal,
                           fontSize: 13,
                         ),
                       ),
@@ -632,7 +652,6 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
       ),
     );
   }
-
 
   Widget _buildParticipantAndControls() {
     return StreamBuilder<QuerySnapshot>(
@@ -670,10 +689,8 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
                   children: [
                     _buildUserBox(_currentUid, myName, isMe: true),
                     ..._remoteUsers.map(
-                      (uid) => _buildUserBox(
-                        uid.toString(),
-                        nameMap[uid] ?? 'User',
-                      ),
+                      (uid) =>
+                          _buildUserBox(uid.toString(), nameMap[uid] ?? 'User'),
                     ),
                   ],
                 ),
@@ -719,8 +736,8 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
           gradient: isOn
               ? LinearGradient(
                   colors: [
-                    Colors.redAccent.withOpacity(0.7),
-                    Colors.red.shade900.withOpacity(0.5),
+                    Colors.redAccent.withValues(alpha: 0.7),
+                    Colors.red.shade900.withValues(alpha: 0.5),
                   ],
                 )
               : null,
@@ -733,7 +750,7 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
           boxShadow: isOn
               ? [
                   BoxShadow(
-                    color: Colors.redAccent.withOpacity(0.3),
+                    color: Colors.redAccent.withValues(alpha: 0.3),
                     blurRadius: 8,
                     spreadRadius: 1,
                   ),
@@ -777,7 +794,7 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
               boxShadow: isMe
                   ? [
                       BoxShadow(
-                        color: Colors.redAccent.withOpacity(0.25),
+                        color: Colors.redAccent.withValues(alpha: 0.25),
                         blurRadius: 10,
                         spreadRadius: 2,
                       ),
@@ -805,7 +822,7 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
                       child: Icon(
                         Icons.person,
                         color: isMe
-                            ? Colors.redAccent.withOpacity(0.6)
+                            ? Colors.redAccent.withValues(alpha: 0.6)
                             : Colors.white24,
                         size: 42,
                       ),
@@ -878,7 +895,7 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
                               color: Colors.white24,
                               width: 1.5,
                             ),
-                            color: Colors.white.withOpacity(0.05),
+                            color: Colors.white.withValues(alpha: 0.05),
                           ),
                           child: const Center(
                             child: Icon(
@@ -900,8 +917,7 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
                         GestureDetector(
                           onTap: () async {
                             if (_isHost) {
-                              final isTv =
-                                  movieDoc['is_tv'] as bool? ?? false;
+                              final isTv = movieDoc['is_tv'] as bool? ?? false;
                               // Fetch episode count nếu là phim bộ và chưa có
                               int? totalEps =
                                   movieDoc['total_episodes'] as int?;
@@ -950,7 +966,7 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
                               border: Border.all(color: Colors.white10),
                               boxShadow: [
                                 BoxShadow(
-                                  color: Colors.black.withOpacity(0.3),
+                                  color: Colors.black.withValues(alpha: 0.3),
                                   blurRadius: 6,
                                   offset: const Offset(0, 3),
                                 ),
@@ -1043,8 +1059,9 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
       ),
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setSheet) {
-          List<Map<String, String>> categories =
-              isTvMode ? tvCategories : movieCategories;
+          List<Map<String, String>> categories = isTvMode
+              ? tvCategories
+              : movieCategories;
 
           Future<void> loadMovies({bool resetPage = false}) async {
             if (resetPage) currentPage = 1;
@@ -1393,7 +1410,7 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
                                       ? [
                                           BoxShadow(
                                             color: Colors.greenAccent
-                                                .withOpacity(0.35),
+                                                .withValues(alpha: 0.35),
                                             blurRadius: 10,
                                           ),
                                         ]
@@ -1422,10 +1439,12 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
                                             vertical: 2,
                                           ),
                                           decoration: BoxDecoration(
-                                            color: Colors.blueAccent
-                                                .withOpacity(0.85),
-                                            borderRadius:
-                                                BorderRadius.circular(4),
+                                            color: Colors.blueAccent.withValues(
+                                              alpha: 0.85,
+                                            ),
+                                            borderRadius: BorderRadius.circular(
+                                              4,
+                                            ),
                                           ),
                                           child: const Text(
                                             'Bộ',
@@ -1458,7 +1477,9 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
                                             begin: Alignment.bottomCenter,
                                             end: Alignment.topCenter,
                                             colors: [
-                                              Colors.black.withOpacity(0.85),
+                                              Colors.black.withValues(
+                                                alpha: 0.85,
+                                              ),
                                               Colors.transparent,
                                             ],
                                           ),
@@ -1697,10 +1718,7 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
           actions: [
             TextButton(
               onPressed: () => Navigator.pop(ctx, false),
-              child: const Text(
-                'Hủy',
-                style: TextStyle(color: Colors.white54),
-              ),
+              child: const Text('Hủy', style: TextStyle(color: Colors.white54)),
             ),
             ElevatedButton(
               style: ElevatedButton.styleFrom(

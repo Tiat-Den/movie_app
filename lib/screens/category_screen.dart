@@ -94,44 +94,52 @@ class _CategoryScreenState extends State<CategoryScreen> {
             ),
 
             Container(
-              padding: const EdgeInsets.symmetric(vertical: 12),
               color: const Color(0xFF211F30),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  IconButton(
-                    onPressed: _page > 1 ? () => setState(() => _page--) : null,
-                    icon: const Icon(Icons.arrow_back_ios),
-                    color: _page > 1 ? Colors.white : Colors.white38,
-                  ),
-                  const SizedBox(width: 20),
-                  Container(
-                    padding: const EdgeInsets.symmetric(
-                      horizontal: 20,
-                      vertical: 8,
-                    ),
-                    decoration: BoxDecoration(
-                      color: Colors.redAccent,
-                      borderRadius: BorderRadius.circular(20),
-                    ),
-                    child: Text(
-                      "Trang $_page",
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontWeight: FontWeight.bold,
-                        fontSize: 16,
+              child: SafeArea(
+                top: false,
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 8),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      IconButton(
+                        onPressed:
+                            _page > 1 ? () => setState(() => _page--) : null,
+                        icon: const Icon(Icons.arrow_back_ios),
+                        color: _page > 1 ? Colors.white : Colors.white38,
+                        iconSize: 18,
                       ),
-                    ),
+                      const SizedBox(width: 16),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 18,
+                          vertical: 7,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.redAccent,
+                          borderRadius: BorderRadius.circular(20),
+                        ),
+                        child: Text(
+                          "Trang $_page",
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 16),
+                      IconButton(
+                        onPressed: () => setState(() => _page++),
+                        icon: const Icon(
+                          Icons.arrow_forward_ios,
+                          color: Colors.white,
+                        ),
+                        iconSize: 18,
+                      ),
+                    ],
                   ),
-                  const SizedBox(width: 20),
-                  IconButton(
-                    onPressed: () => setState(() => _page++),
-                    icon: const Icon(
-                      Icons.arrow_forward_ios,
-                      color: Colors.white,
-                    ),
-                  ),
-                ],
+                ),
               ),
             ),
           ],

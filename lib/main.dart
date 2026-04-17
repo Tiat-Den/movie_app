@@ -3,6 +3,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 
 import 'package:movie_app/screens/auth_wrapper.dart';
+import 'package:movie_app/screens/home_screen.dart';
+import 'package:movie_app/screens/login_screen.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -11,10 +13,10 @@ void main() async {
 
   await Firebase.initializeApp(
     options: const FirebaseOptions(
-      apiKey:"AIzaSyAqqVZ1fKkgr-7wKJxKOHe476_3aBjoE8k",
-      appId:"1:355226614467:android:248454c16f3eb7eb840076",
-      messagingSenderId:"355226614467",
-      projectId:"movie-app-68d6d",
+      apiKey: "AIzaSyAqqVZ1fKkgr-7wKJxKOHe476_3aBjoE8k",
+      appId: "1:355226614467:android:248454c16f3eb7eb840076",
+      messagingSenderId: "355226614467",
+      projectId: "movie-app-68d6d",
     ),
   );
 
@@ -29,8 +31,21 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       debugShowCheckedModeBanner: false,
       title: 'Movie App',
-      theme: ThemeData(primarySwatch: Colors.blue, useMaterial3: true),
+      theme: ThemeData(
+        brightness: Brightness.dark,
+        primarySwatch: Colors.red,
+        useMaterial3: true,
+        scaffoldBackgroundColor: const Color(0xFF15141F),
+      ),
+
+      // Màn hình khởi đầu dùng AuthWrapper để kiểm tra login
       home: const AuthWrapper(),
+
+      // ─── ĐĂNG KÝ ROUTES  ───
+      routes: {
+        '/login': (context) => const LoginScreen(),
+        '/home': (context) => const HomeScreen(),
+      },
     );
   }
 }

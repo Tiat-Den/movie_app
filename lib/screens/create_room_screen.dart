@@ -12,36 +12,21 @@ class CreateRoomScreen extends StatefulWidget {
 }
 
 class _CreateRoomScreenState extends State<CreateRoomScreen> {
-  // ─── Bước ────────────────────────────────────────────────────────────────
-  int _step = 0; // 0 = nhập tên phòng, 1 = chọn phim
-
-  // ─── Bước 1 ───────────────────────────────────────────────────────────────
+  int _step = 0; // 0: Nhập tên phòng, 1: Chọn phim
   final _roomNameController = TextEditingController();
-
-  // ─── Bước 2 ───────────────────────────────────────────────────────────────
+  final _searchController = TextEditingController();
   final ApiService _api = ApiService();
   final RoomService _roomService = RoomService();
 
-  final _searchController = TextEditingController();
   String _searchQuery = '';
-
-  // Danh sách tất cả phim tải về
   List<Movie> _allMovies = [];
   bool _loadingMovies = true;
-
-  // Phim đã chọn vào playlist
   final List<Movie> _playlist = [];
-
-  // Nút tạo phòng
   bool _isCreating = false;
-
-  // ─── Loại nội dung: phim lẻ hay phim bộ ──────────────────────────────────
-  bool _isTvMode = false; // false = phim lẻ, true = phim bộ
-
-  // ─── Phân trang ───────────────────────────────────────────────────────────
+  bool _isTvMode = false;
   int _currentPage = 1;
+  int _selectedCategory = 0;
 
-  // ─── Tab category phim lẻ ─────────────────────────────────────────────────
   final List<Map<String, String>> _movieCategories = [
     {'label': 'Hot', 'type': 'popular'},
     {'label': 'Mới', 'type': 'now_playing'},
@@ -49,18 +34,13 @@ class _CreateRoomScreenState extends State<CreateRoomScreen> {
     {'label': 'Hành Động', 'type': 'action'},
     {'label': 'Hài', 'type': 'comedy'},
     {'label': 'Kinh Dị', 'type': 'horror'},
-    {'label': 'Viễn Tưởng', 'type': 'scifi'},
   ];
 
-  // ─── Tab category phim bộ ─────────────────────────────────────────────────
   final List<Map<String, String>> _tvCategories = [
     {'label': 'Phổ Biến', 'type': 'tv_popular'},
     {'label': 'Đánh Giá Cao', 'type': 'tv_top_rated'},
-    {'label': 'Chiếu Hôm Nay', 'type': 'tv_airing_today'},
     {'label': 'Hoạt Hình', 'type': 'tv_animation'},
   ];
-
-  int _selectedCategory = 0;
 
   List<Map<String, String>> get _categories =>
       _isTvMode ? _tvCategories : _movieCategories;
@@ -103,11 +83,9 @@ class _CreateRoomScreenState extends State<CreateRoomScreen> {
         .toList();
   }
 
-  bool _isInPlaylist(Movie movie) => _playlist.any((m) => m.id == movie.id);
-
   void _toggleMovie(Movie movie) {
     setState(() {
-      if (_isInPlaylist(movie)) {
+      if (_playlist.any((m) => m.id == movie.id)) {
         _playlist.removeWhere((m) => m.id == movie.id);
       } else {
         _playlist.add(movie);
@@ -115,580 +93,407 @@ class _CreateRoomScreenState extends State<CreateRoomScreen> {
     });
   }
 
+  void _switchMode(bool toTv) {
+    if (_isTvMode == toTv) return;
+    setState(() {
+      _isTvMode = toTv;
+      _selectedCategory = 0;
+      _currentPage = 1;
+      _searchQuery = '';
+      _searchController.clear();
+    });
+    _loadMovies();
+  }
+
   Future<void> _createRoom() async {
     if (_isCreating || _playlist.isEmpty) return;
     setState(() => _isCreating = true);
-
     try {
       final firstMovie = _playlist.first;
-
-      String? realVideoUrl = await _api.getMovieStreamLink(
+      String? realUrl = await _api.getMovieStreamLink(
         firstMovie.id,
         firstMovie.title,
         firstMovie.originalTitle,
         isTv: firstMovie.isTv,
       );
 
-      if (realVideoUrl == null || realVideoUrl.isEmpty) {
+      if (realUrl == null) {
         if (!mounted) return;
         setState(() => _isCreating = false);
-        ScaffoldMessenger.of(context).showSnackBar(
-          const SnackBar(
-            content: Text("Không lấy được link phim, hãy thử phim khác!"),
-          ),
-        );
+        ScaffoldMessenger.of(
+          context,
+        ).showSnackBar(const SnackBar(content: Text("Lỗi link phim!")));
         return;
       }
 
-      debugPrint("Link phím: $realVideoUrl");
-
       final roomId = await _roomService.createRoom(
         roomName: _roomNameController.text.trim(),
-        videoUrl: realVideoUrl,
+        videoUrl: realUrl,
         movieList: _playlist,
       );
 
-      if (!mounted) return;
-      setState(() => _isCreating = false);
-
-      if (roomId != null) {
+      if (roomId != null && mounted) {
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(
-            builder: (context) => RoomMovieScreen(roomId: roomId),
-          ),
+          MaterialPageRoute(builder: (_) => RoomMovieScreen(roomId: roomId)),
         );
       }
     } catch (e) {
-      if (!mounted) return;
       setState(() => _isCreating = false);
-      debugPrint("❌ Lỗi hệ thống khi tạo phòng: $e");
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text(
-            e.toString().contains('TimeoutException')
-                ? 'Kết nối quá chậm, vui lòng thử lại!'
-                : 'Lỗi tạo phòng: ${e.toString()}',
-          ),
-          backgroundColor: Colors.redAccent,
-          duration: const Duration(seconds: 3),
-        ),
-      );
     }
   }
 
-  // Chuyển đổi chế độ phim lẻ / phim bộ
-  void _switchMode(bool toTv) {
-    if (_isTvMode == toTv) return;
-    setState(() {
-      _isTvMode = toTv;
-      _selectedCategory = 0;
-      _searchQuery = '';
-      _searchController.clear();
-      _currentPage = 1;
-    });
-    _loadMovies();
-  }
-
-  // ═══════════════════════════════════════════════════════════════════════════
-  //  UI
-  // ═══════════════════════════════════════════════════════════════════════════
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFF15141F),
-      appBar: AppBar(
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-        iconTheme: const IconThemeData(color: Colors.white),
-        title: Text(
-          _step == 0 ? 'Tạo Phòng Xem Phim' : 'Chọn Phim Cho Phòng',
-          style: const TextStyle(
-            color: Colors.white,
-            fontWeight: FontWeight.bold,
-          ),
+      // Quan trọng: SafeArea để tránh bị 3 nút điều hướng che
+      body: SafeArea(
+        child: Column(
+          children: [
+            _buildCustomAppBar(),
+            Expanded(child: _step == 0 ? _buildStep1() : _buildStep2()),
+          ],
         ),
-        actions: _step == 1
-            ? [
-                Padding(
-                  padding: const EdgeInsets.only(right: 12),
-                  child: TextButton.icon(
-                    onPressed: _playlist.isEmpty || _isCreating
-                        ? null
-                        : _createRoom,
-                    icon: _isCreating
-                        ? const SizedBox(
-                            width: 16,
-                            height: 16,
-                            child: CircularProgressIndicator(
-                              color: Colors.white,
-                              strokeWidth: 2,
-                            ),
-                          )
-                        : const Icon(
-                            Icons.check_circle,
-                            color: Colors.greenAccent,
-                          ),
-                    label: Text(
-                      'Tạo phòng',
-                      style: TextStyle(
-                        color: _playlist.isEmpty
-                            ? Colors.white38
-                            : Colors.greenAccent,
-                        fontWeight: FontWeight.bold,
-                      ),
-                    ),
-                  ),
-                ),
-              ]
-            : null,
       ),
-      body: _step == 0 ? _buildStep1() : _buildStep2(),
     );
   }
 
-  // ─── Bước 1: Nhập tên phòng ───────────────────────────────────────────────
-  Widget _buildStep1() {
-    return Padding(
-      padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 20),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+  Widget _buildCustomAppBar() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 8),
+      child: Row(
         children: [
-          // Illustration
-          Center(
-            child: Container(
-              width: 110,
-              height: 110,
-              decoration: BoxDecoration(
-                gradient: const RadialGradient(
-                  colors: [Color(0xFF3D1A1A), Color(0xFF15141F)],
-                ),
-                shape: BoxShape.circle,
-                border: Border.all(
-                  color: Colors.redAccent.withValues(alpha: 0.4),
-                  width: 2,
-                ),
-              ),
-              child: const Icon(
-                Icons.meeting_room_rounded,
-                color: Colors.redAccent,
-                size: 52,
-              ),
-            ),
+          IconButton(
+            icon: const Icon(Icons.arrow_back, color: Colors.white),
+            onPressed: () =>
+                _step == 1 ? setState(() => _step = 0) : Navigator.pop(context),
           ),
-          const SizedBox(height: 32),
-
-          const Text(
-            'Đặt tên cho phòng của bạn',
-            style: TextStyle(
+          Text(
+            _step == 0 ? 'Tạo Phòng' : 'Chọn Phim',
+            style: const TextStyle(
               color: Colors.white,
               fontSize: 20,
               fontWeight: FontWeight.bold,
             ),
           ),
-          const SizedBox(height: 8),
-          const Text(
-            'Bạn bè sẽ thấy tên phòng khi tham gia cùng xem phim.',
-            style: TextStyle(color: Colors.white54, fontSize: 14),
-          ),
-          const SizedBox(height: 24),
-
-          // TextField tên phòng
-          Container(
-            decoration: BoxDecoration(
-              color: const Color(0xFF211F30),
-              borderRadius: BorderRadius.circular(14),
-              border: Border.all(color: Colors.white12),
-            ),
-            child: TextField(
-              controller: _roomNameController,
-              autofocus: true,
-              style: const TextStyle(color: Colors.white, fontSize: 16),
-              decoration: InputDecoration(
-                hintText: 'VD: Phòng chiếu phim tối thứ 6',
-                hintStyle: const TextStyle(color: Colors.white38),
-                prefixIcon: const Icon(Icons.edit, color: Colors.redAccent),
-                border: InputBorder.none,
-                contentPadding: const EdgeInsets.symmetric(
-                  horizontal: 16,
-                  vertical: 18,
-                ),
-                // Giới hạn số ký tự
-                suffixText: '${_roomNameController.text.length}/40',
-                suffixStyle: const TextStyle(
-                  color: Colors.white38,
-                  fontSize: 12,
-                ),
-              ),
-              maxLength: 40,
-              buildCounter:
-                  (
-                    context, {
-                    required currentLength,
-                    required isFocused,
-                    maxLength,
-                  }) => null,
-              onChanged: (_) => setState(() {}),
-            ),
-          ),
-
           const Spacer(),
-
-          // Nút Tiếp theo
-          SizedBox(
-            width: double.infinity,
-            height: 54,
-            child: ElevatedButton(
-              onPressed: _roomNameController.text.trim().isEmpty
-                  ? null
-                  : () => setState(() => _step = 1),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.redAccent,
-                disabledBackgroundColor: Colors.white12,
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14),
-                ),
-              ),
-              child: const Row(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  Text(
-                    'Tiếp theo — Chọn phim',
-                    style: TextStyle(
-                      fontSize: 16,
-                      fontWeight: FontWeight.bold,
-                      color: Colors.white,
+          if (_step == 1)
+            TextButton(
+              onPressed: _playlist.isEmpty || _isCreating ? null : _createRoom,
+              child: _isCreating
+                  ? const SizedBox(
+                      width: 20,
+                      height: 20,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.greenAccent,
+                      ),
+                    )
+                  : Text(
+                      'Tạo',
+                      style: TextStyle(
+                        color: _playlist.isEmpty
+                            ? Colors.white24
+                            : Colors.greenAccent,
+                        fontWeight: FontWeight.bold,
+                        fontSize: 16,
+                      ),
                     ),
-                  ),
-                  SizedBox(width: 8),
-                  Icon(Icons.arrow_forward_ios, size: 16, color: Colors.white),
-                ],
-              ),
             ),
-          ),
-          const SizedBox(height: 16),
         ],
       ),
     );
   }
 
-  // ─── Bước 2: Chọn phim ────────────────────────────────────────────────────
+  // BƯỚC 1: NHẬP TÊN
+  Widget _buildStep1() {
+    return SingleChildScrollView(
+      // Padding này giúp đẩy nội dung lên khi hiện bàn phím
+      padding: EdgeInsets.only(
+        left: 24,
+        right: 24,
+        top: 40,
+        bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+      ),
+      child: Column(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(25),
+            decoration: BoxDecoration(
+              color: Colors.redAccent.withValues(alpha: 0.1),
+              shape: BoxShape.circle,
+            ),
+            child: const Icon(
+              Icons.meeting_room_rounded,
+              color: Colors.redAccent,
+              size: 60,
+            ),
+          ),
+          const SizedBox(height: 30),
+          const Text(
+            'Tên phòng của bạn',
+            style: TextStyle(
+              color: Colors.white,
+              fontSize: 22,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(height: 10),
+          const Text(
+            'Dùng tên thật hoặc tên phim để bạn bè dễ tìm nhé',
+            style: TextStyle(color: Colors.white54, fontSize: 14),
+          ),
+          const SizedBox(height: 30),
+          TextField(
+            controller: _roomNameController,
+            style: const TextStyle(color: Colors.white),
+            autofocus: true,
+            decoration: InputDecoration(
+              filled: true,
+              fillColor: const Color(0xFF211F30),
+              hintText: 'Nhập tên phòng...',
+              hintStyle: const TextStyle(color: Colors.white24),
+              border: OutlineInputBorder(
+                borderRadius: BorderRadius.circular(15),
+                borderSide: BorderSide.none,
+              ),
+              prefixIcon: const Icon(Icons.edit, color: Colors.redAccent),
+            ),
+            onChanged: (_) => setState(() {}),
+          ),
+          const SizedBox(height: 50),
+          SizedBox(
+            width: double.infinity,
+            height: 55,
+            child: ElevatedButton(
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.redAccent,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(15),
+                ),
+              ),
+              onPressed: _roomNameController.text.trim().isEmpty
+                  ? null
+                  : () => setState(() => _step = 1),
+              child: const Text(
+                'Tiếp theo',
+                style: TextStyle(
+                  fontSize: 16,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.white,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // BƯỚC 2: CHỌN PHIM
   Widget _buildStep2() {
     return Column(
       children: [
-        // ── Toggle Phim Lẻ / Phim Bộ ──────────────────────────────────────
+        // Chuyển chế độ Movie/TV
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
-          child: Container(
-            decoration: BoxDecoration(
-              color: const Color(0xFF211F30),
-              borderRadius: BorderRadius.circular(12),
-            ),
-            child: Row(
-              children: [
-                Expanded(
-                  child: GestureDetector(
-                    onTap: () => _switchMode(false),
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 200),
-                      padding: const EdgeInsets.symmetric(vertical: 10),
-                      decoration: BoxDecoration(
-                        color: !_isTvMode
-                            ? Colors.redAccent
-                            : Colors.transparent,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            Icons.movie,
-                            color: !_isTvMode ? Colors.white : Colors.white38,
-                            size: 16,
-                          ),
-                          const SizedBox(width: 6),
-                          Text(
-                            'Phim Lẻ',
-                            style: TextStyle(
-                              color: !_isTvMode ? Colors.white : Colors.white38,
-                              fontWeight: !_isTvMode
-                                  ? FontWeight.bold
-                                  : FontWeight.normal,
-                              fontSize: 14,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-                Expanded(
-                  child: GestureDetector(
-                    onTap: () => _switchMode(true),
-                    child: AnimatedContainer(
-                      duration: const Duration(milliseconds: 200),
-                      padding: const EdgeInsets.symmetric(vertical: 10),
-                      decoration: BoxDecoration(
-                        color: _isTvMode ? Colors.redAccent : Colors.transparent,
-                        borderRadius: BorderRadius.circular(12),
-                      ),
-                      child: Row(
-                        mainAxisAlignment: MainAxisAlignment.center,
-                        children: [
-                          Icon(
-                            Icons.tv,
-                            color: _isTvMode ? Colors.white : Colors.white38,
-                            size: 16,
-                          ),
-                          const SizedBox(width: 6),
-                          Text(
-                            'Phim Bộ',
-                            style: TextStyle(
-                              color: _isTvMode ? Colors.white : Colors.white38,
-                              fontWeight: _isTvMode
-                                  ? FontWeight.bold
-                                  : FontWeight.normal,
-                              fontSize: 14,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                ),
-              ],
-            ),
+          padding: const EdgeInsets.symmetric(horizontal: 16),
+          child: Row(
+            children: [
+              _modeTab(
+                'Phim Lẻ',
+                Icons.movie_outlined,
+                !_isTvMode,
+                () => _switchMode(false),
+              ),
+              const SizedBox(width: 10),
+              _modeTab(
+                'Phim Bộ',
+                Icons.tv_rounded,
+                _isTvMode,
+                () => _switchMode(true),
+              ),
+            ],
           ),
         ),
-
-        // ── Thanh search ──────────────────────────────────────────────────
+        // Thanh Search
         Padding(
-          padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+          padding: const EdgeInsets.all(16),
           child: Container(
             decoration: BoxDecoration(
               color: const Color(0xFF211F30),
               borderRadius: BorderRadius.circular(12),
-              border: Border.all(color: Colors.white12),
             ),
             child: TextField(
               controller: _searchController,
               style: const TextStyle(color: Colors.white),
               decoration: const InputDecoration(
-                hintText: 'Tìm kiếm phim...',
-                hintStyle: TextStyle(color: Colors.white38),
-                prefixIcon: Icon(Icons.search, color: Colors.redAccent),
+                hintText: 'Tìm phim...',
+                hintStyle: TextStyle(color: Colors.white24),
+                prefixIcon: Icon(Icons.search, color: Colors.white54),
                 border: InputBorder.none,
-                contentPadding: EdgeInsets.symmetric(vertical: 14),
               ),
               onChanged: (v) => setState(() => _searchQuery = v),
             ),
           ),
         ),
-
-        // ── Category tabs ─────────────────────────────────────────────────
-        const SizedBox(height: 10),
-        SizedBox(
-          height: 38,
-          child: ListView.separated(
-            scrollDirection: Axis.horizontal,
-            padding: const EdgeInsets.symmetric(horizontal: 16),
-            itemCount: _categories.length,
-            separatorBuilder: (context, index) => const SizedBox(width: 8),
-            itemBuilder: (context, i) {
-              final selected = i == _selectedCategory;
-              return GestureDetector(
-                onTap: () {
-                  if (_selectedCategory != i) {
-                    setState(() {
-                      _selectedCategory = i;
-                      _searchQuery = '';
-                      _searchController.clear();
-                      _currentPage = 1;
-                    });
-                    _loadMovies();
-                  }
-                },
-                child: AnimatedContainer(
-                  duration: const Duration(milliseconds: 200),
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 14,
-                    vertical: 8,
-                  ),
-                  decoration: BoxDecoration(
-                    color: selected
-                        ? Colors.redAccent
-                        : const Color(0xFF211F30),
-                    borderRadius: BorderRadius.circular(20),
-                    border: Border.all(
-                      color: selected ? Colors.redAccent : Colors.white12,
-                    ),
-                  ),
-                  child: Text(
-                    _categories[i]['label']!,
-                    style: TextStyle(
-                      color: selected ? Colors.white : Colors.white60,
-                      fontWeight: selected
-                          ? FontWeight.bold
-                          : FontWeight.normal,
-                      fontSize: 13,
-                    ),
-                  ),
-                ),
-              );
-            },
-          ),
-        ),
-        const SizedBox(height: 8),
-
-        // ── Playlist đã chọn (ẩn nếu rỗng) ──────────────────────────────
-        if (_playlist.isNotEmpty) _buildPlaylistBar(),
-
-        // ── Grid phim ────────────────────────────────────────────────────
+        // Playlist (ngang)
+        if (_playlist.isNotEmpty) _buildSmallPlaylist(),
+        // Grid phim
         Expanded(
           child: _loadingMovies
               ? const Center(
                   child: CircularProgressIndicator(color: Colors.redAccent),
                 )
-              : _filteredMovies.isEmpty
-              ? const Center(
-                  child: Text(
-                    'Không tìm thấy phim',
-                    style: TextStyle(color: Colors.white54),
-                  ),
-                )
               : GridView.builder(
-                  padding: const EdgeInsets.fromLTRB(16, 4, 16, 8),
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
                   gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
                     crossAxisCount: 3,
-                    childAspectRatio: 0.62,
-                    mainAxisSpacing: 12,
-                    crossAxisSpacing: 12,
+                    childAspectRatio: 0.65,
+                    crossAxisSpacing: 10,
+                    mainAxisSpacing: 10,
                   ),
                   itemCount: _filteredMovies.length,
-                  itemBuilder: (context, i) {
-                    final movie = _filteredMovies[i];
-                    final inList = _isInPlaylist(movie);
-                    return _buildMovieTile(movie, inList);
-                  },
+                  itemBuilder: (ctx, i) => _buildMovieCard(_filteredMovies[i]),
                 ),
         ),
-
-        // ── Phân trang ────────────────────────────────────────────────────
-        if (_searchQuery.isEmpty)
-          Container(
-            padding: const EdgeInsets.symmetric(vertical: 10),
-            color: const Color(0xFF211F30),
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                IconButton(
-                  onPressed: _currentPage > 1
-                      ? () {
-                          setState(() => _currentPage--);
-                          _loadMovies();
-                        }
-                      : null,
-                  icon: const Icon(Icons.arrow_back_ios),
-                  color: _currentPage > 1 ? Colors.white : Colors.white24,
-                  iconSize: 18,
-                ),
-                const SizedBox(width: 12),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 18,
-                    vertical: 7,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.redAccent,
-                    borderRadius: BorderRadius.circular(20),
-                  ),
-                  child: Text(
-                    'Trang $_currentPage',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 14,
-                    ),
-                  ),
-                ),
-                const SizedBox(width: 12),
-                IconButton(
-                  onPressed: () {
-                    setState(() => _currentPage++);
-                    _loadMovies();
-                  },
-                  icon: const Icon(Icons.arrow_forward_ios, color: Colors.white),
-                  iconSize: 18,
-                ),
-              ],
-            ),
-          ),
+        // Phân trang dính đáy (có Padding để không bị che)
+        if (_searchQuery.isEmpty) _buildPagination(),
       ],
     );
   }
 
-  // ─── Playlist bar ─────────────────────────────────────────────────────────
-  Widget _buildPlaylistBar() {
-    return Container(
-      height: 100,
-      margin: const EdgeInsets.fromLTRB(16, 0, 16, 8),
-      padding: const EdgeInsets.all(10),
-      decoration: BoxDecoration(
-        color: const Color(0xFF211F30),
-        borderRadius: BorderRadius.circular(14),
-        border: Border.all(color: Colors.redAccent.withValues(alpha: 0.3)),
+  Widget _modeTab(
+    String title,
+    IconData icon,
+    bool active,
+    VoidCallback onTap,
+  ) {
+    return Expanded(
+      child: GestureDetector(
+        onTap: onTap,
+        child: Container(
+          padding: const EdgeInsets.symmetric(vertical: 10),
+          decoration: BoxDecoration(
+            color: active ? Colors.redAccent : Colors.white10,
+            borderRadius: BorderRadius.circular(12),
+          ),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Icon(
+                icon,
+                color: active ? Colors.white : Colors.white38,
+                size: 18,
+              ),
+              const SizedBox(width: 8),
+              Text(
+                title,
+                style: TextStyle(
+                  color: active ? Colors.white : Colors.white38,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+            ],
+          ),
+        ),
       ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
+    );
+  }
+
+  Widget _buildSmallPlaylist() {
+    return Container(
+      height: 70,
+      padding: const EdgeInsets.only(left: 16, bottom: 10),
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        itemCount: _playlist.length,
+        itemBuilder: (ctx, i) => Padding(
+          padding: const EdgeInsets.only(right: 10),
+          child: Stack(
+            children: [
+              ClipRRect(
+                borderRadius: BorderRadius.circular(8),
+                child: Image.network(
+                  _playlist[i].posterPath,
+                  width: 45,
+                  height: 60,
+                  fit: BoxFit.cover,
+                ),
+              ),
+              Positioned(
+                top: 0,
+                right: 0,
+                child: GestureDetector(
+                  onTap: () => _toggleMovie(_playlist[i]),
+                  child: Container(
+                    decoration: const BoxDecoration(
+                      color: Colors.red,
+                      shape: BoxShape.circle,
+                    ),
+                    child: const Icon(
+                      Icons.close,
+                      size: 14,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildMovieCard(Movie movie) {
+    bool isSelected = _playlist.any((m) => m.id == movie.id);
+    return GestureDetector(
+      onTap: () => _toggleMovie(movie),
+      child: Stack(
         children: [
-          Text(
-            'Đã chọn ${_playlist.length} phim:',
-            style: const TextStyle(
-              color: Colors.redAccent,
-              fontSize: 12,
-              fontWeight: FontWeight.bold,
+          ClipRRect(
+            borderRadius: BorderRadius.circular(10),
+            child: Image.network(
+              movie.posterPath,
+              fit: BoxFit.cover,
+              width: double.infinity,
+              height: double.infinity,
             ),
           ),
-          const SizedBox(height: 6),
-          Expanded(
-            child: ListView.separated(
-              scrollDirection: Axis.horizontal,
-              itemCount: _playlist.length,
-              separatorBuilder: (context, index) => const SizedBox(width: 6),
-              itemBuilder: (context, i) {
-                final m = _playlist[i];
-                return Stack(
-                  children: [
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: Image.network(
-                        m.posterPath,
-                        width: 38,
-                        height: 56,
-                        fit: BoxFit.cover,
-                      ),
-                    ),
-                    Positioned(
-                      top: 0,
-                      right: 0,
-                      child: GestureDetector(
-                        onTap: () => _toggleMovie(m),
-                        child: Container(
-                          decoration: const BoxDecoration(
-                            color: Colors.red,
-                            shape: BoxShape.circle,
-                          ),
-                          child: const Icon(
-                            Icons.close,
-                            size: 14,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ),
-                    ),
-                  ],
-                );
-              },
+          if (isSelected)
+            Container(
+              decoration: BoxDecoration(
+                color: Colors.black54,
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: const Center(
+                child: Icon(
+                  Icons.check_circle,
+                  color: Colors.greenAccent,
+                  size: 30,
+                ),
+              ),
+            ),
+          Positioned(
+            bottom: 0,
+            left: 0,
+            right: 0,
+            child: Container(
+              padding: const EdgeInsets.all(5),
+              decoration: const BoxDecoration(
+                gradient: LinearGradient(
+                  begin: Alignment.bottomCenter,
+                  end: Alignment.topCenter,
+                  colors: [Colors.black, Colors.transparent],
+                ),
+              ),
+              child: Text(
+                movie.title,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                style: const TextStyle(color: Colors.white, fontSize: 10),
+              ),
             ),
           ),
         ],
@@ -696,114 +501,51 @@ class _CreateRoomScreenState extends State<CreateRoomScreen> {
     );
   }
 
-  // ─── Movie tile ───────────────────────────────────────────────────────────
-  Widget _buildMovieTile(Movie movie, bool inList) {
-    return GestureDetector(
-      onTap: () => _toggleMovie(movie),
-      child: AnimatedContainer(
-        duration: const Duration(milliseconds: 180),
-        decoration: BoxDecoration(
-          borderRadius: BorderRadius.circular(10),
-          border: Border.all(
-            color: inList ? Colors.greenAccent : Colors.transparent,
-            width: 2.5,
+  Widget _buildPagination() {
+    return Container(
+      padding: const EdgeInsets.symmetric(vertical: 15),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.center,
+        children: [
+          IconButton(
+            onPressed: _currentPage > 1
+                ? () {
+                    setState(() => _currentPage--);
+                    _loadMovies();
+                  }
+                : null,
+            icon: const Icon(
+              Icons.arrow_back_ios,
+              color: Colors.white,
+              size: 18,
+            ),
           ),
-          boxShadow: inList
-              ? [
-                  BoxShadow(
-                    color: Colors.greenAccent.withValues(alpha: 0.35),
-                    blurRadius: 10,
-                  ),
-                ]
-              : [],
-        ),
-        child: Stack(
-          children: [
-            // Poster
-            ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: Image.network(
-                movie.posterPath,
-                width: double.infinity,
-                height: double.infinity,
-                fit: BoxFit.cover,
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 15, vertical: 5),
+            decoration: BoxDecoration(
+              color: Colors.redAccent,
+              borderRadius: BorderRadius.circular(20),
+            ),
+            child: Text(
+              'Trang $_currentPage',
+              style: const TextStyle(
+                color: Colors.white,
+                fontWeight: FontWeight.bold,
               ),
             ),
-
-            // Badge phim bộ
-            if (movie.isTv)
-              Positioned(
-                top: 6,
-                left: 6,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 5,
-                    vertical: 2,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.blueAccent.withOpacity(0.85),
-                    borderRadius: BorderRadius.circular(4),
-                  ),
-                  child: const Text(
-                    'Bộ',
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 9,
-                      fontWeight: FontWeight.bold,
-                    ),
-                  ),
-                ),
-              ),
-
-            // Gradient + tiêu đề
-            Positioned(
-              bottom: 0,
-              left: 0,
-              right: 0,
-              child: Container(
-                padding: const EdgeInsets.fromLTRB(6, 20, 6, 6),
-                decoration: BoxDecoration(
-                  borderRadius: const BorderRadius.vertical(
-                    bottom: Radius.circular(8),
-                  ),
-                  gradient: LinearGradient(
-                    begin: Alignment.bottomCenter,
-                    end: Alignment.topCenter,
-                    colors: [
-                      Colors.black.withValues(alpha: 0.85),
-                      Colors.transparent,
-                    ],
-                  ),
-                ),
-                child: Text(
-                  movie.title,
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 11,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-              ),
+          ),
+          IconButton(
+            onPressed: () {
+              setState(() => _currentPage++);
+              _loadMovies();
+            },
+            icon: const Icon(
+              Icons.arrow_forward_ios,
+              color: Colors.white,
+              size: 18,
             ),
-
-            // Dấu check khi đã chọn
-            if (inList)
-              Positioned(
-                top: 6,
-                right: 6,
-                child: Container(
-                  padding: const EdgeInsets.all(3),
-                  decoration: const BoxDecoration(
-                    color: Colors.greenAccent,
-                    shape: BoxShape.circle,
-                  ),
-                  child: const Icon(Icons.check, size: 14, color: Colors.black),
-                ),
-              ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }

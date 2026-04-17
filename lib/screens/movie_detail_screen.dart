@@ -114,164 +114,170 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
         iconTheme: const IconThemeData(color: Colors.white),
       ),
       extendBodyBehindAppBar: true,
-      body: SingleChildScrollView(
-        child: Column(
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            // Banner/Poster Phim
-            SizedBox(
-              width: double.infinity,
-              height: 500,
-              child: CachedNetworkImage(
-                imageUrl: widget.movie.posterPath,
-                fit: BoxFit.cover,
-                placeholder: (context, url) =>
-                    Container(color: Colors.grey[900]),
-                errorWidget: (context, url, error) => const Icon(Icons.error),
+      body: SafeArea(
+        top: false,
+        child: SingleChildScrollView(
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              // Banner/Poster Phim
+              SizedBox(
+                width: double.infinity,
+                height: 500,
+                child: CachedNetworkImage(
+                  imageUrl: widget.movie.posterPath,
+                  fit: BoxFit.cover,
+                  placeholder: (context, url) =>
+                      Container(color: Colors.grey[900]),
+                  errorWidget: (context, url, error) => const Icon(Icons.error),
+                ),
               ),
-            ),
 
-            Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    widget.movie.title,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontSize: 28,
-                      fontWeight: FontWeight.bold,
+              Padding(
+                padding: const EdgeInsets.all(16.0),
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      widget.movie.title,
+                      style: const TextStyle(
+                        color: Colors.white,
+                        fontSize: 28,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 8),
+                    const SizedBox(height: 8),
 
-                  // 🟢 HIỂN THỊ TRẠNG THÁI SỐ TẬP (CHỈ PHIM BỘ)
-                  if (widget.movie.isTv)
-                    Padding(
-                      padding: const EdgeInsets.only(bottom: 12),
-                      child: Container(
-                        padding: const EdgeInsets.symmetric(
-                          horizontal: 10,
-                          vertical: 6,
-                        ),
-                        decoration: BoxDecoration(
-                          color: Colors.blueAccent.withOpacity(0.1),
-                          borderRadius: BorderRadius.circular(8),
-                          border: Border.all(
-                            color: Colors.blueAccent.withOpacity(0.3),
+                    // 🟢 HIỂN THỊ TRẠNG THÁI SỐ TẬP (CHỈ PHIM BỘ)
+                    if (widget.movie.isTv)
+                      Padding(
+                        padding: const EdgeInsets.only(bottom: 12),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(
+                            horizontal: 10,
+                            vertical: 6,
+                          ),
+                          decoration: BoxDecoration(
+                            color: Colors.blueAccent.withValues(alpha: 0.1),
+                            borderRadius: BorderRadius.circular(8),
+                            border: Border.all(
+                              color: Colors.blueAccent.withValues(alpha: 0.3),
+                            ),
+                          ),
+                          child: Text(
+                            _isLoadingEpisodes
+                                ? "Đang tải số tập..."
+                                : "Số tập: ${_episodes?.length ?? '0'} / $_totalEpisodesFromApi tập",
+                            style: const TextStyle(
+                              color: Colors.blueAccent,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 13,
+                            ),
                           ),
                         ),
-                        child: Text(
-                          _isLoadingEpisodes
-                              ? "Đang tải số tập..."
-                              : "Số tập: ${_episodes?.length ?? '0'} / $_totalEpisodesFromApi tập",
-                          style: const TextStyle(
-                            color: Colors.blueAccent,
+                      ),
+
+                    _buildStarRating(widget.movie.voteAverage),
+                    const SizedBox(height: 20),
+
+                    // NÚT XEM PHIM
+                    SizedBox(
+                      width: double.infinity,
+                      height: 50,
+                      child: ElevatedButton.icon(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: Colors.red,
+                          foregroundColor: Colors.white,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(8),
+                          ),
+                        ),
+                        icon: const Icon(Icons.play_circle_fill, size: 28),
+                        label: const Text(
+                          "XEM PHIM NGAY",
+                          style: TextStyle(
+                            fontSize: 18,
                             fontWeight: FontWeight.bold,
-                            fontSize: 13,
                           ),
                         ),
-                      ),
-                    ),
-
-                  _buildStarRating(widget.movie.voteAverage),
-                  const SizedBox(height: 20),
-
-                  // NÚT XEM PHIM
-                  SizedBox(
-                    width: double.infinity,
-                    height: 50,
-                    child: ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: Colors.red,
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                      ),
-                      icon: const Icon(Icons.play_circle_fill, size: 28),
-                      label: const Text(
-                        "XEM PHIM NGAY",
-                        style: TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                      onPressed: () async {
-                        // Hiện loading dialog trong khi lấy link stream
-                        showDialog(
-                          context: context,
-                          barrierDismissible: false,
-                          builder: (context) => const Center(
-                            child: CircularProgressIndicator(color: Colors.red),
-                          ),
-                        );
-
-                        String? realVideoUrl = await ApiService()
-                            .getMovieStreamLink(
-                              widget.movie.id,
-                              widget.movie.title,
-                              widget.movie.originalTitle,
-                              isTv: widget.movie.isTv,
-                            );
-
-                        if (mounted)
-                          Navigator.pop(context); // Tắt loading dialog
-
-                        if (realVideoUrl != null && mounted) {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => WatchMovieScreen(
-                                movie: widget.movie,
-                                videoUrl: realVideoUrl,
-                                isOffline: false,
-                                episodes: _episodes, // Truyền list tập sang
+                        onPressed: () async {
+                          // Hiện loading dialog trong khi lấy link stream
+                          showDialog(
+                            context: context,
+                            barrierDismissible: false,
+                            builder: (context) => const Center(
+                              child: CircularProgressIndicator(
+                                color: Colors.red,
                               ),
                             ),
                           );
-                        } else {
+
+                          String? realVideoUrl = await ApiService()
+                              .getMovieStreamLink(
+                                widget.movie.id,
+                                widget.movie.title,
+                                widget.movie.originalTitle,
+                                isTv: widget.movie.isTv,
+                              );
+
                           if (mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              const SnackBar(
-                                content: Text(
-                                  "Không tìm thấy link phim phù hợp!",
+                            Navigator.pop(context); // Tắt loading dialog
+                          }
+
+                          if (realVideoUrl != null && mounted) {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => WatchMovieScreen(
+                                  movie: widget.movie,
+                                  videoUrl: realVideoUrl,
+                                  isOffline: false,
+                                  episodes: _episodes, // Truyền list tập sang
                                 ),
-                                backgroundColor: Colors.red,
                               ),
                             );
+                          } else {
+                            if (mounted) {
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                    "Không tìm thấy link phim phù hợp!",
+                                  ),
+                                  backgroundColor: Colors.red,
+                                ),
+                              );
+                            }
                           }
-                        }
-                      },
+                        },
+                      ),
                     ),
-                  ),
 
-                  const SizedBox(height: 25),
-                  const Text(
-                    "Nội dung phim",
-                    style: TextStyle(
-                      color: Colors.white,
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
+                    const SizedBox(height: 25),
+                    const Text(
+                      "Nội dung phim",
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 8),
-                  Text(
-                    widget.movie.overview.isEmpty
-                        ? "Đang cập nhật nội dung..."
-                        : widget.movie.overview,
-                    style: const TextStyle(
-                      color: Colors.white70,
-                      fontSize: 15,
-                      height: 1.6,
+                    const SizedBox(height: 8),
+                    Text(
+                      widget.movie.overview.isEmpty
+                          ? "Đang cập nhật nội dung..."
+                          : widget.movie.overview,
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontSize: 15,
+                        height: 1.6,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 40),
-                ],
+                    const SizedBox(height: 40),
+                  ],
+                ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
       ),
     );
