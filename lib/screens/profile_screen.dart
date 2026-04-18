@@ -1,6 +1,8 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'dart:convert';
+import 'package:image_picker/image_picker.dart';
 import '../services/auth_service.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -13,6 +15,7 @@ class ProfileScreen extends StatefulWidget {
 class _ProfileScreenState extends State<ProfileScreen> {
   final AuthService _authService = AuthService();
   final FirebaseFirestore _firestore = FirebaseFirestore.instance;
+  final ImagePicker _picker = ImagePicker();
   User? currentUser;
 
   @override
@@ -21,7 +24,83 @@ class _ProfileScreenState extends State<ProfileScreen> {
     currentUser = _authService.getCurrentUser();
   }
 
-  // --- HÀM ĐỔI MẬT KHẨU (Chỉ dành cho người dùng Email) ---
+  // 1. Hàm chọn và tải ảnh đại diện lên Firestore
+  Future<void> _pickAndUploadAvatar() async {
+    try {
+      final XFile? image = await _picker.pickImage(
+        source: ImageSource.gallery,
+        maxWidth: 300,
+        maxHeight: 300,
+        imageQuality: 50,
+      );
+
+      if (image == null) return;
+
+      _showToast("Đang xử lý ảnh...", isError: false);
+
+      final bytes = await image.readAsBytes();
+      final base64String = base64Encode(bytes);
+
+      if (currentUser != null) {
+        // Lưu vào Firestore với field riêng 'customAvatarUrl'
+        // KHÔNG dùng 'avatarUrl' vì có thể bị ghi đè bởi photoURL Google
+        await _firestore.collection('users').doc(currentUser!.uid).set({
+          'customAvatarUrl': base64String, // <-- field riêng cho ảnh tự chọn
+          'uid': currentUser!.uid,
+          'email': currentUser!.email,
+          'name': currentUser!.displayName ?? "Người dùng",
+          'updatedAt': FieldValue.serverTimestamp(),
+        }, SetOptions(merge: true));
+
+        _showToast("Cập nhật ảnh đại diện thành công!", isError: false);
+      }
+    } catch (e) {
+      _showToast("Lỗi khi tải ảnh: $e");
+      debugPrint("❌ Chi tiết lỗi upload avatar: $e");
+    }
+  }
+
+  // 2. Hàm lấy nguồn ảnh — ưu tiên đúng thứ tự
+  ImageProvider? _getAvatarProvider(
+    Map<String, dynamic>? userData,
+    bool isGoogle,
+  ) {
+    // ƯU TIÊN 1: Ảnh người dùng tự chọn (base64) — luôn thắng
+    // Dùng field 'customAvatarUrl' để không bao giờ bị Google photoURL ghi đè
+    final String? customAvatar = userData?['customAvatarUrl'];
+    if (customAvatar != null && customAvatar.isNotEmpty) {
+      try {
+        return MemoryImage(base64Decode(customAvatar));
+      } catch (e) {
+        debugPrint("❌ Lỗi giải mã Base64: $e");
+      }
+    }
+
+    // ƯU TIÊN 2 (legacy): Nếu 'avatarUrl' trong Firestore là link http
+    // (tức là ảnh Google đã được lưu thủ công trước đó)
+    final String? legacyAvatar = userData?['avatarUrl'];
+    if (legacyAvatar != null && legacyAvatar.isNotEmpty) {
+      if (legacyAvatar.startsWith('http')) {
+        return NetworkImage(legacyAvatar);
+      }
+      // Nếu là base64 cũ trong 'avatarUrl'
+      try {
+        return MemoryImage(base64Decode(legacyAvatar));
+      } catch (e) {
+        debugPrint("❌ Lỗi giải mã Base64 legacy: $e");
+      }
+    }
+
+    // ƯU TIÊN 3: Ảnh mặc định từ Google (chỉ khi chưa đổi ảnh bao giờ)
+    if (isGoogle && currentUser?.photoURL != null) {
+      return NetworkImage(currentUser!.photoURL!);
+    }
+
+    // ƯU TIÊN 4: Không có ảnh → hiện icon mặc định
+    return null;
+  }
+
+  // --- HÀM ĐỔI MẬT KHẨU ---
   void _showChangePasswordDialog() {
     final oldPasswordController = TextEditingController();
     final newPasswordController = TextEditingController();
@@ -101,8 +180,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       } catch (e) {
                         _showToast(e.toString().replaceAll("Exception: ", ""));
                       } finally {
-                        if (context.mounted)
+                        if (context.mounted) {
                           setDialogState(() => isLoading = false);
+                        }
                       }
                     },
               child: isLoading
@@ -122,7 +202,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  // --- HÀM CHỈNH SỬA THÔNG TIN (Cập nhật Firestore & DisplayName) ---
+  // --- HÀM CHỈNH SỬA THÔNG TIN ---
   void _showEditProfileDialog(Map<String, dynamic> currentData) {
     final nameController = TextEditingController(
       text: currentData['name'] ?? currentUser?.displayName,
@@ -165,22 +245,20 @@ class _ProfileScreenState extends State<ProfileScreen> {
                       if (nameController.text.trim().isEmpty) return;
                       setDialogState(() => isLoading = true);
                       try {
-                        // 1. Cập nhật Firestore
                         await _firestore
                             .collection('users')
                             .doc(currentUser!.uid)
                             .update({'name': nameController.text.trim()});
-                        // 2. Cập nhật DisplayName trong Firebase Auth
                         await currentUser!.updateDisplayName(
                           nameController.text.trim(),
                         );
-
                         if (context.mounted) Navigator.pop(context);
                       } catch (e) {
                         _showToast("Lỗi: $e");
                       } finally {
-                        if (context.mounted)
+                        if (context.mounted) {
                           setDialogState(() => isLoading = false);
+                        }
                       }
                     },
               child: const Text("Lưu lại"),
@@ -204,7 +282,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ),
         iconTheme: const IconThemeData(color: Colors.white),
       ),
-      // --- LẤY DỮ LIỆU TỪ FIRESTORE THỜI GIAN THỰC ---
       body: StreamBuilder<DocumentSnapshot>(
         stream: _firestore
             .collection('users')
@@ -217,10 +294,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
             );
           }
 
-          // Dữ liệu từ Firestore (để lấy tên thật ông đã lưu)
           var userData = snapshot.data?.data() as Map<String, dynamic>?;
 
-          // Kiểm tra xem có đăng nhập bằng Google không
           bool isGoogle = false;
           if (currentUser != null) {
             isGoogle = currentUser!.providerData.any(
@@ -233,24 +308,46 @@ class _ProfileScreenState extends State<ProfileScreen> {
               children: [
                 const SizedBox(height: 20),
                 Center(
-                  child: CircleAvatar(
-                    radius: 50,
-                    backgroundColor: Colors.redAccent,
-                    backgroundImage: isGoogle && currentUser?.photoURL != null
-                        ? NetworkImage(currentUser!.photoURL!)
-                        : null,
-                    child: (!isGoogle || currentUser?.photoURL == null)
-                        ? const Icon(
-                            Icons.person,
-                            size: 60,
-                            color: Colors.white,
-                          )
-                        : null,
+                  child: GestureDetector(
+                    onTap: _pickAndUploadAvatar,
+                    child: Stack(
+                      children: [
+                        CircleAvatar(
+                          radius: 55,
+                          backgroundColor: Colors.redAccent,
+                          backgroundImage: _getAvatarProvider(
+                            userData,
+                            isGoogle,
+                          ),
+                          child: _getAvatarProvider(userData, isGoogle) == null
+                              ? const Icon(
+                                  Icons.person,
+                                  size: 60,
+                                  color: Colors.white,
+                                )
+                              : null,
+                        ),
+                        Positioned(
+                          bottom: 0,
+                          right: 0,
+                          child: Container(
+                            padding: const EdgeInsets.all(6),
+                            decoration: const BoxDecoration(
+                              color: Colors.blueAccent,
+                              shape: BoxShape.circle,
+                            ),
+                            child: const Icon(
+                              Icons.camera_alt,
+                              color: Colors.white,
+                              size: 18,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
                 const SizedBox(height: 30),
-
-                // Họ tên lấy từ Firestore (userData['name']) ưu tiên hơn
                 _buildInfoTile(
                   Icons.person,
                   "Họ và tên",
@@ -263,10 +360,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                   "Email",
                   userData?['email'] ?? currentUser?.email ?? "Chưa có email",
                 ),
-
-                // Phần hiển thị mật khẩu/phương thức đăng nhập
                 _buildAuthMethodTile(isGoogle),
-
                 const SizedBox(height: 40),
                 _buildButton(
                   "Chỉnh sửa thông tin",
@@ -275,9 +369,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
                 const SizedBox(height: 15),
                 _buildButton("Đăng xuất", () async {
                   await _authService.signOut();
-                  if (mounted)
-                    Navigator.of(context).popUntil((route) => route.isFirst);
+                  if (mounted) {
+                    Navigator.pushNamedAndRemoveUntil(
+                      context,
+                      '/login',
+                      (route) => false,
+                    );
+                  }
                 }),
+                const SizedBox(height: 30),
               ],
             ),
           );

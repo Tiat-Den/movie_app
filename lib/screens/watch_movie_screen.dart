@@ -8,7 +8,7 @@ import 'package:flutter/services.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:path_provider/path_provider.dart';
-
+import 'dart:convert';
 import '../models/movie_model.dart';
 
 class WatchMovieScreen extends StatefulWidget {
@@ -183,6 +183,7 @@ class _WatchMovieScreenState extends State<WatchMovieScreen> {
     if (_commentController.text.trim().isNotEmpty && _user != null) {
       _firestore.collection('comments').add({
         'movieId': widget.movie.id,
+        'userId': _user.uid,
         'userName': _user.displayName ?? "Khán giả",
         'text': _commentController.text.trim(),
         'timestamp': FieldValue.serverTimestamp(),
@@ -424,15 +425,14 @@ class _WatchMovieScreenState extends State<WatchMovieScreen> {
           itemCount: snapshot.data!.docs.length,
           itemBuilder: (context, i) {
             var doc = snapshot.data!.docs[i];
+            final data = doc.data() as Map<String, dynamic>?;
+            String? userId = data != null && data.containsKey('userId')
+                ? data['userId']
+                : null;
+
             return ListTile(
               contentPadding: EdgeInsets.zero,
-              leading: CircleAvatar(
-                backgroundColor: Colors.redAccent,
-                child: Text(
-                  doc['userName'][0],
-                  style: const TextStyle(color: Colors.white),
-                ),
-              ),
+              leading: _buildAvatar(userId, doc['userName']),
               title: Text(
                 doc['userName'],
                 style: const TextStyle(color: Colors.white, fontSize: 14),
@@ -443,6 +443,58 @@ class _WatchMovieScreenState extends State<WatchMovieScreen> {
               ),
             );
           },
+        );
+      },
+    );
+  }
+
+  Widget _buildAvatar(String? userId, String userName) {
+    if (userId == null) {
+      return CircleAvatar(
+        backgroundColor: Colors.redAccent,
+        child: Text(
+          userName.isNotEmpty ? userName[0] : '?',
+          style: const TextStyle(color: Colors.white),
+        ),
+      );
+    }
+
+    return FutureBuilder<DocumentSnapshot>(
+      future: _firestore.collection('users').doc(userId).get(),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting ||
+            !snapshot.hasData) {
+          return const CircleAvatar(
+            backgroundColor: Colors.grey,
+            child: SizedBox(
+              width: 15,
+              height: 15,
+              child: CircularProgressIndicator(
+                strokeWidth: 2,
+                color: Colors.white,
+              ),
+            ),
+          );
+        }
+
+        var userData = snapshot.data!.data() as Map<String, dynamic>?;
+        String? avatarUrl = userData?['avatarUrl'];
+
+        if (avatarUrl != null && avatarUrl.isNotEmpty) {
+          return CircleAvatar(
+            backgroundColor: Colors.transparent,
+            backgroundImage: avatarUrl.startsWith('http')
+                ? NetworkImage(avatarUrl)
+                : MemoryImage(base64Decode(avatarUrl)) as ImageProvider,
+          );
+        }
+
+        return CircleAvatar(
+          backgroundColor: Colors.redAccent,
+          child: Text(
+            userName.isNotEmpty ? userName[0].toUpperCase() : '?',
+            style: const TextStyle(color: Colors.white),
+          ),
         );
       },
     );

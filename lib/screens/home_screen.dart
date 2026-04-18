@@ -1,6 +1,8 @@
-import 'dart:async';
+﻿import 'dart:async';
+import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:movie_app/screens/downloaded_movies_screen.dart';
 import 'package:movie_app/services/auth_service.dart';
 import '../models/movie_model.dart';
@@ -846,13 +848,69 @@ class _HomeScreenState extends State<HomeScreen> {
                     Row(
                       children: [
                         PopupMenuButton<String>(
-                          icon: const CircleAvatar(
-                            backgroundColor: Colors.white24,
-                            child: Icon(
-                              Icons.person,
-                              color: Colors.white,
-                              size: 20,
-                            ),
+                          icon: StreamBuilder<DocumentSnapshot>(
+                            stream: FirebaseFirestore.instance
+                                .collection('users')
+                                .doc(FirebaseAuth.instance.currentUser?.uid)
+                                .snapshots(),
+                            builder: (context, snapshot) {
+                              ImageProvider? provider;
+
+                              if (snapshot.hasData && snapshot.data!.exists) {
+                                final data =
+                                    snapshot.data!.data()
+                                        as Map<String, dynamic>?;
+
+                                // Ưu tiên 1: ảnh tự chọn (base64) — khớp với ProfileScreen
+                                final customAvatar =
+                                    data?['customAvatarUrl'] as String?;
+                                if (customAvatar != null &&
+                                    customAvatar.isNotEmpty) {
+                                  try {
+                                    provider = MemoryImage(
+                                      base64Decode(customAvatar),
+                                    );
+                                  } catch (_) {}
+                                }
+
+                                // Ưu tiên 2: avatarUrl cũ (legacy)
+                                if (provider == null) {
+                                  final legacy = data?['avatarUrl'] as String?;
+                                  if (legacy != null && legacy.isNotEmpty) {
+                                    if (legacy.startsWith('http')) {
+                                      provider = NetworkImage(legacy);
+                                    } else {
+                                      try {
+                                        provider = MemoryImage(
+                                          base64Decode(legacy),
+                                        );
+                                      } catch (_) {}
+                                    }
+                                  }
+                                }
+                              }
+
+                              // Ưu tiên 3: photoURL từ Google (chỉ khi chưa đổi ảnh)
+                              if (provider == null) {
+                                final photoUrl =
+                                    FirebaseAuth.instance.currentUser?.photoURL;
+                                if (photoUrl != null && photoUrl.isNotEmpty) {
+                                  provider = NetworkImage(photoUrl);
+                                }
+                              }
+
+                              return CircleAvatar(
+                                backgroundColor: Colors.white24,
+                                backgroundImage: provider,
+                                child: provider == null
+                                    ? const Icon(
+                                        Icons.person,
+                                        color: Colors.white,
+                                        size: 20,
+                                      )
+                                    : null,
+                              );
+                            },
                           ),
                           color: const Color(0xFF211F30),
                           onSelected: (v) {

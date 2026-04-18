@@ -1,5 +1,6 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
+import 'package:movie_app/screens/forgot_password_screen.dart';
 import 'package:movie_app/screens/register_screen.dart';
 import 'package:movie_app/services/auth_service.dart';
 
@@ -15,6 +16,7 @@ class _LoginScreenState extends State<LoginScreen> {
   final _passwordController = TextEditingController();
   final _authService = AuthService();
   bool _isLoading = false;
+  bool _isPasswordVisible = false;
 
   // --- ĐĂNG NHẬP EMAIL ---
   void _handleEmailLogin() async {
@@ -51,10 +53,14 @@ class _LoginScreenState extends State<LoginScreen> {
       }
     } on FirebaseAuthException catch (e) {
       String errorMsg = "Lỗi đăng nhập!";
-      if (e.code == 'user-not-found') {
-        errorMsg = "Email không tồn tại!";
-      } else if (e.code == 'wrong-password') {
-        errorMsg = "Sai mật khẩu!";
+      if (e is FirebaseAuthException) {
+        if (e.code == 'user-not-found') {
+          errorMsg = "Email này chưa được đăng ký!";
+        } else if (e.code == 'wrong-password') {
+          errorMsg = "Sai mật khẩu!";
+        } else if (e.code == 'invalid-credential') {
+          errorMsg = "Thông tin đăng nhập không chính xác!";
+        }
       }
 
       _showSnackBar(errorMsg);
@@ -94,21 +100,18 @@ class _LoginScreenState extends State<LoginScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFF15141F), // Màu nền tối đồng bộ
-      appBar: AppBar(
-        title: const Text(
-          "Đăng Nhập",
-          style: TextStyle(fontWeight: FontWeight.bold),
-        ),
-        backgroundColor: Colors.transparent,
-        elevation: 0,
-      ),
+      appBar: AppBar(backgroundColor: Colors.transparent, elevation: 0),
       body: Center(
         child: SingleChildScrollView(
           padding: const EdgeInsets.all(24.0),
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              const Icon(Icons.movie_filter, size: 80, color: Colors.redAccent),
+              Image.asset(
+                'assets/images/icon2.png', // Đường dẫn file logo của ông
+                height: 180,
+                width: 180,
+              ),
               const SizedBox(height: 30),
 
               // Ô Email
@@ -134,7 +137,8 @@ class _LoginScreenState extends State<LoginScreen> {
               TextField(
                 controller: _passwordController,
                 style: const TextStyle(color: Colors.white),
-                obscureText: true,
+                // CẬP NHẬT: dùng biến để ẩn hiện chữ
+                obscureText: !_isPasswordVisible,
                 decoration: InputDecoration(
                   labelText: "Mật khẩu",
                   labelStyle: const TextStyle(color: Colors.white54),
@@ -145,9 +149,44 @@ class _LoginScreenState extends State<LoginScreen> {
                     borderSide: BorderSide.none,
                   ),
                   prefixIcon: const Icon(Icons.lock, color: Colors.redAccent),
+
+                  // THÊM PHẦN NÀY: Nút con mắt
+                  suffixIcon: IconButton(
+                    icon: Icon(
+                      _isPasswordVisible
+                          ? Icons.visibility
+                          : Icons.visibility_off,
+                      color: Colors.white54,
+                    ),
+                    onPressed: () {
+                      setState(() {
+                        _isPasswordVisible = !_isPasswordVisible;
+                      });
+                    },
+                  ),
                 ),
               ),
-              const SizedBox(height: 30),
+
+              const SizedBox(height: 10), // Khoảng cách nhỏ
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton(
+                  onPressed: () {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (_) => const ForgotPasswordScreen(),
+                      ),
+                    );
+                  },
+                  child: const Text(
+                    "Quên mật khẩu?",
+                    style: TextStyle(color: Colors.white54, fontSize: 13),
+                  ),
+                ),
+              ),
+
+              const SizedBox(height: 20),
 
               if (_isLoading)
                 const CircularProgressIndicator(color: Colors.redAccent)

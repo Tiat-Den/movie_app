@@ -274,4 +274,28 @@ class ApiService {
     }
     return [];
   }
+
+  Future<String?> getMovieTrailer(int movieId, bool isTv) async {
+    final type = isTv ? 'tv' : 'movie';
+    final url = Uri.parse(
+      '$_baseUrl/$type/$movieId/videos?api_key=$_apiKey&language=en-US',
+    );
+
+    try {
+      final res = await http.get(url);
+      if (res.statusCode == 200) {
+        final data = json.decode(res.body);
+        final List results = data['results'] ?? [];
+        // Tìm video có type là 'Trailer' và từ nguồn 'YouTube'
+        final trailer = results.firstWhere(
+          (v) => v['type'] == 'Trailer' && v['site'] == 'YouTube',
+          orElse: () => null,
+        );
+        return trailer?['key'];
+      }
+    } catch (e) {
+      debugPrint("Lỗi lấy trailer: $e");
+    }
+    return null;
+  }
 }

@@ -56,7 +56,12 @@ dependencies:
   share_plus: ^12.0.2
   agora_rtc_engine: ^6.3.2
 
+  youtube_player_flutter: ^9.1.1
+  image_picker: ^1.2.1
+
 dev_dependencies:
+  flutter_launcher_icons: ^0.13.1
+
   flutter_test:
     sdk: flutter
 
@@ -81,6 +86,7 @@ flutter:
   # To add assets to your application, add an assets section, like this:
   assets:
     - key.env
+    - assets/images/
   #   - images/a_dot_burr.jpeg
   #   - images/a_dot_ham.jpeg
 
@@ -109,3 +115,9 @@ flutter:
   #
   # For details regarding fonts from package dependencies,
   # see https://flutter.dev/to/font-from-package
+flutter_launcher_icons:
+  android: "launcher_icon"
+  ios: true
+  image_path: "assets/images/LogoApp2.png" 
+  adaptive_icon_background: "#15141F"     
+  adaptive_icon_foreground: "assets/images/LogoApp2.png"

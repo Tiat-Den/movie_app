@@ -17,6 +17,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
   final _authService = AuthService();
   bool _isLoading = false;
 
+  bool _isPasswordVisible = false;
+  bool _isConfirmPasswordVisible = false;
+
   void _handleRegister() async {
     final name = _nameController.text.trim();
     final email = _emailController.text.trim();
@@ -43,13 +46,9 @@ class _RegisterScreenState extends State<RegisterScreen> {
     setState(() => _isLoading = true);
 
     try {
-      // 3. Đăng ký tài khoản
       User? user = await _authService.registerWithEmail(email, password, name);
 
       if (user != null) {
-        // 4. Gửi email xác thực
-        await user.sendEmailVerification();
-
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             const SnackBar(
@@ -57,10 +56,13 @@ class _RegisterScreenState extends State<RegisterScreen> {
                 'Đăng ký thành công! Vui lòng kiểm tra Email để xác thực tài khoản.',
               ),
               backgroundColor: Colors.green,
+              duration: Duration(seconds: 5),
             ),
           );
-          // Quay lại màn hình đăng nhập
-          Navigator.pop(context);
+
+          Future.delayed(const Duration(milliseconds: 500), () {
+            if (mounted) Navigator.pop(context);
+          });
         }
       }
     } catch (e) {
@@ -116,27 +118,57 @@ class _RegisterScreenState extends State<RegisterScreen> {
               const SizedBox(height: 15),
               TextField(
                 controller: _passwordController,
-                decoration: const InputDecoration(
+                obscureText:
+                    !_isPasswordVisible, // Đảo ngược trạng thái hiện tại
+                decoration: InputDecoration(
                   labelText: "Mật khẩu",
-                  prefixIcon: Icon(Icons.lock, color: Colors.redAccent),
-                  border: OutlineInputBorder(),
+                  prefixIcon: const Icon(Icons.lock, color: Colors.redAccent),
+                  border: const OutlineInputBorder(),
+                  // THÊM ICON CON MẮT Ở ĐÂY
+                  suffixIcon: IconButton(
+                    icon: Icon(
+                      _isPasswordVisible
+                          ? Icons.visibility
+                          : Icons.visibility_off,
+                      color: Colors.grey,
+                    ),
+                    onPressed: () {
+                      setState(() {
+                        _isPasswordVisible = !_isPasswordVisible;
+                      });
+                    },
+                  ),
                 ),
-                obscureText: true,
               ),
 
               const SizedBox(height: 15),
               // --- Ô NHẬP LẠI MẬT KHẨU ---
               TextField(
                 controller: _confirmPasswordController,
-                decoration: const InputDecoration(
+                obscureText:
+                    !_isConfirmPasswordVisible, // Đảo ngược trạng thái hiện tại
+                decoration: InputDecoration(
                   labelText: "Nhập lại mật khẩu",
-                  prefixIcon: Icon(
+                  prefixIcon: const Icon(
                     Icons.lock_reset_rounded,
                     color: Colors.redAccent,
                   ),
-                  border: OutlineInputBorder(),
+                  border: const OutlineInputBorder(),
+                  // THÊM ICON CON MẮT Ở ĐÂY
+                  suffixIcon: IconButton(
+                    icon: Icon(
+                      _isConfirmPasswordVisible
+                          ? Icons.visibility
+                          : Icons.visibility_off,
+                      color: Colors.grey,
+                    ),
+                    onPressed: () {
+                      setState(() {
+                        _isConfirmPasswordVisible = !_isConfirmPasswordVisible;
+                      });
+                    },
+                  ),
                 ),
-                obscureText: true,
               ),
 
               const SizedBox(height: 30),

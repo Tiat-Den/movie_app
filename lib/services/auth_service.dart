@@ -27,34 +27,42 @@ class AuthService {
       User? user = result.user;
 
       if (user != null) {
+        // 1. Cập nhật DisplayName
         await user.updateDisplayName(name);
 
+        // 2. Lưu vào Firestore - Đợi lệnh này hoàn tất 100%
         await _firestore.collection('users').doc(user.uid).set({
           'uid': user.uid,
           'name': name,
           'email': email.trim(),
-          'createdAt': DateTime.now(),
+          'createdAt':
+              FieldValue.serverTimestamp(), // Dùng cái này chuyên nghiệp hơn DateTime.now()
           'avatarUrl': '',
         });
 
+        // 3. Gửi email xác thực
         await user.sendEmailVerification();
-        // 2. Đăng xuất ngay lập tức
-        await signOut();
+        print("📩 Đã gửi lệnh yêu cầu gửi email xác thực");
+
+        // 4. Đợi một nhịp nhỏ rồi mới đăng xuất để đảm bảo kết nối Firestore đã xong
+        await Future.delayed(const Duration(milliseconds: 500));
+        await _auth.signOut();
       }
 
       return user;
     } catch (e) {
-      print(e);
+      print("Lỗi tại registerWithEmail: $e");
       rethrow;
     }
   }
 
   Future<User?> signInWithGoogle() async {
     try {
+      // 1. Kích hoạt hộp thoại chọn tài khoản Google
       final GoogleSignInAccount? googleUser = await _googleSignIn.signIn();
-
       if (googleUser == null) return null;
 
+      // 2. Lấy thông tin xác thực từ tài khoản đã chọn
       final GoogleSignInAuthentication googleAuth =
           await googleUser.authentication;
       final OAuthCredential credential = GoogleAuthProvider.credential(
@@ -62,12 +70,31 @@ class AuthService {
         idToken: googleAuth.idToken,
       );
 
+      // 3. Đăng nhập vào Firebase Authentication
       final UserCredential userCredential = await _auth.signInWithCredential(
         credential,
       );
-      return userCredential.user;
+      final User? user = userCredential.user;
+
+      if (user != null) {
+        // 4. ĐỒNG BỘ VÀO FIRESTORE
+        // Dùng .set với merge: true để nếu user đã tồn tại thì không ghi đè mất dữ liệu cũ (như avatar đã đổi)
+        await _firestore.collection('users').doc(user.uid).set({
+          'uid': user.uid,
+          'email': user.email,
+          'name': user.displayName ?? "Người dùng Google",
+          // Chỉ lưu ảnh mặc định của Google nếu trong Firestore chưa có ảnh (avatarUrl trống)
+          'avatarUrl': user.photoURL ?? '',
+          'lastLogin':
+              FieldValue.serverTimestamp(), // Lưu vết lần đăng nhập cuối
+        }, SetOptions(merge: true));
+
+        print("✅ Đã đồng bộ User Google ${user.email} vào Firestore");
+      }
+
+      return user;
     } catch (e) {
-      print("Lỗi : $e");
+      print("❌ Lỗi đăng nhập Google: $e");
       rethrow;
     }
   }

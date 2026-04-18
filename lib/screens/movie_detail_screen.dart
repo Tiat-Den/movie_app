@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:http/http.dart' as http;
 import 'dart:convert';
+import 'package:youtube_player_flutter/youtube_player_flutter.dart';
 import '../models/movie_model.dart';
 import '../services/api_service.dart';
 import 'watch_movie_screen.dart';
@@ -16,24 +17,34 @@ class MovieDetailScreen extends StatefulWidget {
 }
 
 class _MovieDetailScreenState extends State<MovieDetailScreen> {
-  List<dynamic>? _episodes; // Lưu danh sách tập phim thực tế
-  String _totalEpisodesFromApi =
-      "?"; // Lưu tổng số tập dự kiến (VD: 12, 24, Full)
+  List<dynamic>? _episodes; // Danh sách tập phim thực tế
+  String _totalEpisodesFromApi = "?"; // Tổng số tập dự kiến
   bool _isLoadingEpisodes = false;
 
-  List<Map<String, dynamic>>? _cast;
+  List<Map<String, dynamic>>? _cast; // Danh sách diễn viên
+  YoutubePlayerController? _youtubeController; // Controller trailer
+  String? _trailerKey;
 
   @override
   void initState() {
     super.initState();
-    // Nếu là phim bộ thì mới đi tìm thông tin tập
+    // 1. Nếu là phim bộ thì mới tìm tập phim
     if (widget.movie.isTv) {
       _fetchEpisodeInfo();
     }
-
+    // 2. Lấy danh sách diễn viên
     _fetchCast();
+    // 3. Lấy trailer phim
+    _fetchTrailer();
   }
 
+  @override
+  void dispose() {
+    _youtubeController?.dispose();
+    super.dispose();
+  }
+
+  // Lấy danh sách diễn viên chính (10 người)
   Future<void> _fetchCast() async {
     final castData = await ApiService().getMovieCast(
       widget.movie.id,
@@ -46,11 +57,30 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
     }
   }
 
-  // Hàm lấy thông tin tập phim từ phimapi.com
+  // Lấy mã video trailer YouTube
+  Future<void> _fetchTrailer() async {
+    final key = await ApiService().getMovieTrailer(
+      widget.movie.id,
+      widget.movie.isTv,
+    );
+    if (key != null && mounted) {
+      setState(() {
+        _trailerKey = key;
+        _youtubeController = YoutubePlayerController(
+          initialVideoId: key,
+          flags: const YoutubePlayerFlags(
+            autoPlay: false,
+            mute: false,
+            isLive: false,
+          ),
+        );
+      });
+    }
+  }
+
+  // Lấy thông tin tập phim từ phimapi.com
   Future<void> _fetchEpisodeInfo() async {
     setState(() => _isLoadingEpisodes = true);
-
-    // Lấy phần tên chính của phim để search slug
     String cleanTitle = widget.movie.title.split(':').first.trim();
 
     try {
@@ -70,16 +100,11 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
 
           if (detailRes.statusCode == 200) {
             final detailData = json.decode(detailRes.body);
-
             if (mounted) {
               setState(() {
-                // 1. Lấy danh sách các tập đã có link (để map sang màn hình xem phim)
                 _episodes = detailData['episodes'][0]['server_data'];
-
-                // 2. Lấy tổng số tập dự kiến từ thông tin phim
                 _totalEpisodesFromApi =
                     detailData['movie']['episode_total'] ?? "?";
-
                 _isLoadingEpisodes = false;
               });
             }
@@ -92,14 +117,35 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
     }
   }
 
-  //////////////////////////////////
+  // WIDGETS HIỂN THỊ
+
+  Widget _buildStarRating(double rating) {
+    int starCount = (rating / 2).round();
+    return Row(
+      children: [
+        for (int i = 1; i <= 5; i++)
+          Icon(
+            i <= starCount ? Icons.star : Icons.star_border,
+            color: Colors.amber,
+            size: 22,
+          ),
+        const SizedBox(width: 8),
+        Text(
+          '${rating.toStringAsFixed(1)}/10',
+          style: const TextStyle(
+            color: Colors.white,
+            fontSize: 16,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+      ],
+    );
+  }
+
   Widget _buildCastList() {
-    if (_cast == null) return const Center(child: CircularProgressIndicator());
-    if (_cast!.isEmpty)
-      return const Text(
-        "Không có thông tin diễn viên",
-        style: TextStyle(color: Colors.white54),
-      );
+    if (_cast == null)
+      return const Center(child: CircularProgressIndicator(color: Colors.red));
+    if (_cast!.isEmpty) return const SizedBox.shrink();
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -153,30 +199,31 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
     );
   }
 
-  Widget _buildStarRating(double rating) {
-    int starCount = (rating / 2).round();
-    List<Widget> stars = [];
-    for (int i = 1; i <= 5; i++) {
-      stars.add(
-        Icon(
-          i <= starCount ? Icons.star : Icons.star_border,
-          color: Colors.amber,
-          size: 24,
-        ),
-      );
-    }
-    return Row(
+  Widget _buildTrailerSection() {
+    if (_trailerKey == null || _youtubeController == null)
+      return const SizedBox.shrink();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
       children: [
-        ...stars,
-        const SizedBox(width: 8),
-        Text(
-          '${rating.toStringAsFixed(1)}/10',
-          style: const TextStyle(
+        const Text(
+          "Trailer",
+          style: TextStyle(
             color: Colors.white,
-            fontSize: 16,
+            fontSize: 18,
             fontWeight: FontWeight.bold,
           ),
         ),
+        const SizedBox(height: 12),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(12),
+          child: YoutubePlayer(
+            controller: _youtubeController!,
+            showVideoProgressIndicator: true,
+            progressIndicatorColor: Colors.red,
+          ),
+        ),
+        const SizedBox(height: 25),
       ],
     );
   }
@@ -199,49 +246,7 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
             itemCount: _episodes!.length,
             itemBuilder: (context, index) {
               return GestureDetector(
-                onTap: () async {
-                  showDialog(
-                    context: context,
-                    barrierDismissible: false,
-                    builder: (context) => const Center(
-                      child: CircularProgressIndicator(color: Colors.red),
-                    ),
-                  );
-
-                  String? realVideoUrl = await ApiService().getMovieStreamLink(
-                    widget.movie.id,
-                    widget.movie.title,
-                    widget.movie.originalTitle,
-                    isTv: widget.movie.isTv,
-                    episodeIndex: index,
-                  );
-
-                  if (mounted) Navigator.pop(context);
-
-                  if (realVideoUrl != null && mounted) {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(
-                        builder: (context) => WatchMovieScreen(
-                          movie: widget.movie,
-                          videoUrl: realVideoUrl,
-                          isOffline: false,
-                          episodes: _episodes,
-                          initialEpisodeIndex: index,
-                        ),
-                      ),
-                    );
-                  } else {
-                    if (mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        const SnackBar(
-                          content: Text("Không tìm thấy link phim phù hợp!"),
-                          backgroundColor: Colors.red,
-                        ),
-                      );
-                    }
-                  }
-                },
+                onTap: () => _watchEpisode(index),
                 child: Container(
                   width: 50,
                   margin: const EdgeInsets.only(right: 10),
@@ -256,7 +261,6 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
                     style: const TextStyle(
                       color: Colors.white,
                       fontWeight: FontWeight.bold,
-                      fontSize: 16,
                     ),
                   ),
                 ),
@@ -269,8 +273,59 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
     );
   }
 
+  // Hàm chuyển sang màn hình xem phim
+  Future<void> _watchEpisode([int index = 0]) async {
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (context) =>
+          const Center(child: CircularProgressIndicator(color: Colors.red)),
+    );
+
+    String? realVideoUrl = await ApiService().getMovieStreamLink(
+      widget.movie.id,
+      widget.movie.title,
+      widget.movie.originalTitle,
+      isTv: widget.movie.isTv,
+      episodeIndex: index,
+    );
+
+    if (mounted) Navigator.pop(context);
+
+    if (realVideoUrl != null && mounted) {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => WatchMovieScreen(
+            movie: widget.movie,
+            videoUrl: realVideoUrl,
+            isOffline: false,
+            episodes: _episodes,
+            initialEpisodeIndex: index,
+          ),
+        ),
+      );
+    } else {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text("Không tìm thấy link phim phù hợp!"),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (_isLoadingEpisodes) {
+      return const Scaffold(
+        backgroundColor: Colors.black,
+        body: Center(child: CircularProgressIndicator(color: Colors.red)),
+      );
+    }
+
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
@@ -285,7 +340,7 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Banner/Poster Phim
+              // Banner Poster
               SizedBox(
                 width: double.infinity,
                 height: 500,
@@ -313,31 +368,17 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
                     ),
                     const SizedBox(height: 8),
 
-                    // 🟢 HIỂN THỊ TRẠNG THÁI SỐ TẬP (CHỈ PHIM BỘ)
+                    // Trạng thái số tập
                     if (widget.movie.isTv)
                       Padding(
                         padding: const EdgeInsets.only(bottom: 12),
-                        child: Container(
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 10,
-                            vertical: 6,
-                          ),
-                          decoration: BoxDecoration(
-                            color: Colors.blueAccent.withValues(alpha: 0.1),
-                            borderRadius: BorderRadius.circular(8),
-                            border: Border.all(
-                              color: Colors.blueAccent.withValues(alpha: 0.3),
-                            ),
-                          ),
-                          child: Text(
-                            _isLoadingEpisodes
-                                ? "Đang tải số tập..."
-                                : "Số tập: ${_episodes?.length ?? '0'} / $_totalEpisodesFromApi tập",
-                            style: const TextStyle(
-                              color: Colors.blueAccent,
-                              fontWeight: FontWeight.bold,
-                              fontSize: 13,
-                            ),
+                        child: Text(
+                          _isLoadingEpisodes
+                              ? "Đang tải số tập..."
+                              : "Số tập: ${_episodes?.length ?? '0'} / $_totalEpisodesFromApi tập",
+                          style: const TextStyle(
+                            color: Colors.blueAccent,
+                            fontWeight: FontWeight.bold,
                           ),
                         ),
                       ),
@@ -345,80 +386,41 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
                     _buildStarRating(widget.movie.voteAverage),
                     const SizedBox(height: 20),
 
+                    // 🎬 DANH SÁCH TẬP (Nếu là phim bộ)
                     if (widget.movie.isTv) _buildEpisodeList(),
 
+                    // 👥 DIỄN VIÊN
                     _buildCastList(),
                     const SizedBox(height: 25),
 
-                    // NÚT XEM PHIM
+                    // 🎥 TRAILER
+                    _buildTrailerSection(),
+
+                    // 🔴 NÚT XEM PHIM
                     SizedBox(
                       width: double.infinity,
                       height: 50,
                       child: ElevatedButton.icon(
                         style: ElevatedButton.styleFrom(
                           backgroundColor: Colors.red,
-                          foregroundColor: Colors.white,
                           shape: RoundedRectangleBorder(
                             borderRadius: BorderRadius.circular(8),
                           ),
                         ),
-                        icon: const Icon(Icons.play_circle_fill, size: 28),
+                        icon: const Icon(
+                          Icons.play_circle_fill,
+                          size: 28,
+                          color: Colors.white,
+                        ),
                         label: const Text(
                           "XEM PHIM NGAY",
                           style: TextStyle(
                             fontSize: 18,
                             fontWeight: FontWeight.bold,
+                            color: Colors.white,
                           ),
                         ),
-                        onPressed: () async {
-                          // Hiện loading dialog trong khi lấy link stream
-                          showDialog(
-                            context: context,
-                            barrierDismissible: false,
-                            builder: (context) => const Center(
-                              child: CircularProgressIndicator(
-                                color: Colors.red,
-                              ),
-                            ),
-                          );
-
-                          String? realVideoUrl = await ApiService()
-                              .getMovieStreamLink(
-                                widget.movie.id,
-                                widget.movie.title,
-                                widget.movie.originalTitle,
-                                isTv: widget.movie.isTv,
-                              );
-
-                          if (mounted) {
-                            Navigator.pop(context); // Tắt loading dialog
-                          }
-
-                          if (realVideoUrl != null && mounted) {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => WatchMovieScreen(
-                                  movie: widget.movie,
-                                  videoUrl: realVideoUrl,
-                                  isOffline: false,
-                                  episodes: _episodes, // Truyền list tập sang
-                                ),
-                              ),
-                            );
-                          } else {
-                            if (mounted) {
-                              ScaffoldMessenger.of(context).showSnackBar(
-                                const SnackBar(
-                                  content: Text(
-                                    "Không tìm thấy link phim phù hợp!",
-                                  ),
-                                  backgroundColor: Colors.red,
-                                ),
-                              );
-                            }
-                          }
-                        },
+                        onPressed: () => _watchEpisode(0),
                       ),
                     ),
 

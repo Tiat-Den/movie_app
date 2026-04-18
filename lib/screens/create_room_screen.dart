@@ -1,3 +1,4 @@
+import 'dart:async'; // Cần để dùng Timer
 import 'package:flutter/material.dart';
 import 'package:movie_app/screens/room_movie_screen.dart';
 import '../models/movie_model.dart';
@@ -19,6 +20,7 @@ class _CreateRoomScreenState extends State<CreateRoomScreen> {
   final RoomService _roomService = RoomService();
 
   String _searchQuery = '';
+  Timer? _debounceTimer; // Dùng để đợi người dùng gõ xong mới search
   List<Movie> _allMovies = [];
   bool _loadingMovies = true;
   final List<Movie> _playlist = [];
@@ -51,7 +53,12 @@ class _CreateRoomScreenState extends State<CreateRoomScreen> {
     _loadMovies();
   }
 
+  // --- LOGIC LẤY PHIM ---
+  // Tách biệt logic load theo trang và search online
   Future<void> _loadMovies({bool resetPage = false}) async {
+    if (_searchQuery.isNotEmpty)
+      return; // Nếu đang search thì không load theo trang
+
     setState(() {
       if (resetPage) _currentPage = 1;
       _loadingMovies = true;
@@ -70,17 +77,34 @@ class _CreateRoomScreenState extends State<CreateRoomScreen> {
     }
   }
 
-  List<Movie> get _filteredMovies {
-    if (_searchQuery.isEmpty) return _allMovies;
-    return _allMovies
-        .where(
-          (m) =>
-              m.title.toLowerCase().contains(_searchQuery.toLowerCase()) ||
-              m.originalTitle.toLowerCase().contains(
-                _searchQuery.toLowerCase(),
-              ),
-        )
-        .toList();
+  // --- LOGIC TÌM KIẾM ONLINE (QUAN TRỌNG NHẤT) ---
+  void _onSearchChanged(String query) {
+    if (_debounceTimer?.isActive ?? false) _debounceTimer!.cancel();
+
+    _debounceTimer = Timer(const Duration(milliseconds: 600), () async {
+      setState(() {
+        _searchQuery = query.trim();
+        _loadingMovies = true;
+      });
+
+      if (_searchQuery.isEmpty) {
+        _loadMovies(
+          resetPage: true,
+        ); // Nếu xóa ô search thì hiện lại phim mặc định
+        return;
+      }
+
+      try {
+        // GỌI API SEARCH ĐỂ LỤC TOÀN BỘ KHO PHIM
+        final results = await _api.searchMovies(_searchQuery);
+        setState(() {
+          _allMovies = results;
+          _loadingMovies = false;
+        });
+      } catch (e) {
+        setState(() => _loadingMovies = false);
+      }
+    });
   }
 
   void _toggleMovie(Movie movie) {
@@ -147,7 +171,6 @@ class _CreateRoomScreenState extends State<CreateRoomScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFF15141F),
-      // Quan trọng: SafeArea để tránh bị 3 nút điều hướng che
       body: SafeArea(
         child: Column(
           children: [
@@ -209,7 +232,6 @@ class _CreateRoomScreenState extends State<CreateRoomScreen> {
   // BƯỚC 1: NHẬP TÊN
   Widget _buildStep1() {
     return SingleChildScrollView(
-      // Padding này giúp đẩy nội dung lên khi hiện bàn phím
       padding: EdgeInsets.only(
         left: 24,
         right: 24,
@@ -221,7 +243,7 @@ class _CreateRoomScreenState extends State<CreateRoomScreen> {
           Container(
             padding: const EdgeInsets.all(25),
             decoration: BoxDecoration(
-              color: Colors.redAccent.withValues(alpha: 0.1),
+              color: Colors.redAccent.withOpacity(0.1),
               shape: BoxShape.circle,
             ),
             child: const Icon(
@@ -238,11 +260,6 @@ class _CreateRoomScreenState extends State<CreateRoomScreen> {
               fontSize: 22,
               fontWeight: FontWeight.bold,
             ),
-          ),
-          const SizedBox(height: 10),
-          const Text(
-            'Dùng tên thật hoặc tên phim để bạn bè dễ tìm nhé',
-            style: TextStyle(color: Colors.white54, fontSize: 14),
           ),
           const SizedBox(height: 30),
           TextField(
@@ -295,7 +312,6 @@ class _CreateRoomScreenState extends State<CreateRoomScreen> {
   Widget _buildStep2() {
     return Column(
       children: [
-        // Chuyển chế độ Movie/TV
         Padding(
           padding: const EdgeInsets.symmetric(horizontal: 16),
           child: Row(
@@ -316,7 +332,7 @@ class _CreateRoomScreenState extends State<CreateRoomScreen> {
             ],
           ),
         ),
-        // Thanh Search
+        // THANH SEARCH ONLINE
         Padding(
           padding: const EdgeInsets.all(16),
           child: Container(
@@ -328,22 +344,28 @@ class _CreateRoomScreenState extends State<CreateRoomScreen> {
               controller: _searchController,
               style: const TextStyle(color: Colors.white),
               decoration: const InputDecoration(
-                hintText: 'Tìm phim...',
+                hintText: 'Tìm phim trên toàn cầu...',
                 hintStyle: TextStyle(color: Colors.white24),
-                prefixIcon: Icon(Icons.search, color: Colors.white54),
+                prefixIcon: Icon(Icons.search, color: Colors.redAccent),
                 border: InputBorder.none,
               ),
-              onChanged: (v) => setState(() => _searchQuery = v),
+              onChanged: _onSearchChanged, // GỌI HÀM SEARCH ONLINE
             ),
           ),
         ),
-        // Playlist (ngang)
         if (_playlist.isNotEmpty) _buildSmallPlaylist(),
-        // Grid phim
+
         Expanded(
           child: _loadingMovies
               ? const Center(
                   child: CircularProgressIndicator(color: Colors.redAccent),
+                )
+              : _allMovies.isEmpty
+              ? const Center(
+                  child: Text(
+                    "Không tìm thấy phim nào",
+                    style: TextStyle(color: Colors.white54),
+                  ),
                 )
               : GridView.builder(
                   padding: const EdgeInsets.symmetric(horizontal: 16),
@@ -353,11 +375,11 @@ class _CreateRoomScreenState extends State<CreateRoomScreen> {
                     crossAxisSpacing: 10,
                     mainAxisSpacing: 10,
                   ),
-                  itemCount: _filteredMovies.length,
-                  itemBuilder: (ctx, i) => _buildMovieCard(_filteredMovies[i]),
+                  itemCount: _allMovies.length,
+                  itemBuilder: (ctx, i) => _buildMovieCard(_allMovies[i]),
                 ),
         ),
-        // Phân trang dính đáy (có Padding để không bị che)
+        // CHỈ HIỆN PHÂN TRANG KHI KHÔNG SEARCH (Vì kết quả search thường trả về toàn bộ)
         if (_searchQuery.isEmpty) _buildPagination(),
       ],
     );
@@ -554,6 +576,7 @@ class _CreateRoomScreenState extends State<CreateRoomScreen> {
   void dispose() {
     _roomNameController.dispose();
     _searchController.dispose();
+    _debounceTimer?.cancel();
     super.dispose();
   }
 }

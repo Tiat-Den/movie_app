@@ -1,4 +1,4 @@
-import 'package:agora_rtc_engine/agora_rtc_engine.dart';
+﻿import 'package:agora_rtc_engine/agora_rtc_engine.dart';
 import 'package:flutter/material.dart';
 import 'package:movie_app/models/movie_model.dart';
 import 'package:movie_app/services/api_service.dart';
@@ -51,7 +51,7 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
   List<dynamic> _episodes = [];
   bool _loadingEpisodes = false;
   int _currentEpisodeIndex = 0;
-  int _lastEpisodeMovieId = -1; // tránh reload khi không đổi phim
+  int _lastEpisodeMovieId = -1;
   String? _episodeTotalFromApi;
 
   // --- Guard flags ---
@@ -77,7 +77,6 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
       RtcEngineEventHandler(
         onJoinChannelSuccess: (RtcConnection connection, int elapsed) {
           final uid = connection.localUid ?? 0;
-          // Lưu thông tin bản thân vào Firestore members
           final user = FirebaseAuth.instance.currentUser;
           _firestore
               .collection('rooms')
@@ -101,7 +100,6 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
               UserOfflineReasonType reason,
             ) {
               setState(() => _remoteUsers.remove(remoteUid));
-              // Xóa khỏi Firestore members
               _firestore
                   .collection('rooms')
                   .doc(widget.roomId)
@@ -132,7 +130,6 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
   void _toggleCam() async {
     setState(() => _isCamOn = !_isCamOn);
     await _engine.enableLocalVideo(_isCamOn);
-
     if (_isCamOn) {
       await _engine.startPreview();
     } else {
@@ -147,11 +144,8 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
         .doc(widget.roomId)
         .snapshots()
         .listen((snapshot) {
-          // Phòng bị xóa (host đã rời)
           if (!snapshot.exists) {
-            if (!_isHost && mounted) {
-              Navigator.of(context).pop();
-            }
+            if (!_isHost && mounted) Navigator.of(context).pop();
             return;
           }
           final room = Room.fromFirestore(snapshot);
@@ -163,7 +157,6 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
               _isInitialized = true;
               _currentVideoUrl = room.videoUrl;
             });
-
             _initVideo(room.videoUrl);
           }
 
@@ -172,18 +165,15 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
             _initVideo(room.videoUrl);
           }
 
-          // Load danh sách tập khi phim thay đổi
           final data = snapshot.data() as Map<String, dynamic>;
           final isTv = data['movieIsTv'] as bool? ?? false;
           final movieId = data['currentMovieId'] as int? ?? 0;
           final episodeIdx = data['currentEpisodeIndex'] as int? ?? 0;
 
-          // Sync episode index cho member (không cần load lại episodes)
           if (!_isHost && episodeIdx != _currentEpisodeIndex) {
             setState(() => _currentEpisodeIndex = episodeIdx);
           }
 
-          // Load episodes nếu phim bộ và chưa load cho phim này
           if (isTv && movieId != _lastEpisodeMovieId && movieId > 0) {
             _lastEpisodeMovieId = movieId;
             _loadEpisodes(
@@ -209,11 +199,9 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
   // 3. Khởi tạo Video
   void _initVideo(String url) async {
     if (url.isEmpty) return;
-
     await _videoController?.dispose();
     _videoController = VideoPlayerController.networkUrl(Uri.parse(url));
     await _videoController!.initialize();
-
     setState(() {
       _chewieController = ChewieController(
         videoPlayerController: _videoController!,
@@ -223,14 +211,11 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
         allowMuting: true,
       );
     });
-
     if (_isHost) _videoController!.addListener(_hostVideoListener);
   }
 
   void _hostVideoListener() {
     if (!_isHost || !_isRoomActive) return;
-
-    // Throttle: chu1ec9 gu1ecdi Firestore tu1ed1i u0111a 1 lu1ea7n/giu00e2y
     final now = DateTime.now().millisecondsSinceEpoch;
     if (now - _lastSyncMs < 1000) return;
     _lastSyncMs = now;
@@ -243,7 +228,6 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
           'currentPosition': _videoController!.value.position.inMilliseconds,
         })
         .catchError((e) {
-          // Room u0111u00e3 bu1ecb xu00f3a � tu1eaft flag u0111u1ec3 ngu0103n spam
           _isRoomActive = false;
           _videoController?.removeListener(_hostVideoListener);
         });
@@ -255,7 +239,6 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
     } else if (!room.isPlaying && _videoController!.value.isPlaying) {
       _videoController!.pause();
     }
-
     int diff =
         (room.currentPosition - _videoController!.value.position.inMilliseconds)
             .abs();
@@ -278,20 +261,22 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
     });
     try {
       final cleanTitle = title.split(':').first.trim();
-      final res = await http.get(Uri.parse(
-          'https://phimapi.com/v1/api/tim-kiem?keyword=${Uri.encodeComponent(cleanTitle)}&limit=1'));
+      final res = await http.get(
+        Uri.parse(
+          'https://phimapi.com/v1/api/tim-kiem?keyword=${Uri.encodeComponent(cleanTitle)}&limit=1',
+        ),
+      );
       if (res.statusCode == 200) {
         final data = json.decode(res.body);
         final items = data['data']?['items'];
         if (items != null && items.isNotEmpty) {
           final detailRes = await http.get(
-              Uri.parse('https://phimapi.com/phim/${items[0]['slug']}'));
+            Uri.parse('https://phimapi.com/phim/${items[0]['slug']}'),
+          );
           if (detailRes.statusCode == 200) {
             final detailData = json.decode(detailRes.body);
             final eps = detailData['episodes'][0]['server_data'] ?? [];
-            final epTotal =
-                detailData['movie']?['episode_total']?.toString();
-
+            final epTotal = detailData['movie']?['episode_total']?.toString();
             if (mounted) {
               setState(() {
                 _episodeTotalFromApi = epTotal;
@@ -304,19 +289,13 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
           }
         }
       }
-      // Nếu không tìm thấy hoặc có lỗi thì tắt loading
-      if (mounted) {
-        setState(() {
-          _loadingEpisodes = false;
-        });
-      }
+      if (mounted) setState(() => _loadingEpisodes = false);
     } catch (e) {
       debugPrint('_loadEpisodes error: $e');
       if (mounted) setState(() => _loadingEpisodes = false);
     }
   }
 
-  // Chỉ host mới có thể gọi hàm này
   Future<void> _changeEpisode(int index) async {
     if (!_isHost || index == _currentEpisodeIndex) return;
     if (index >= _episodes.length) return;
@@ -324,7 +303,6 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
     final ep = _episodes[index];
     String? newUrl;
 
-    // Lấy link từ server_data (cùng cấu trúc với WatchMovieScreen)
     if (ep['link_m3u8'] != null && ep['link_m3u8'].toString().isNotEmpty) {
       newUrl = ep['link_m3u8'].toString();
     } else if (ep['server_data'] != null &&
@@ -343,7 +321,6 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
 
     setState(() => _currentEpisodeIndex = index);
 
-    // Sync lên Firestore cho tất cả thành viên
     await _firestore.collection('rooms').doc(widget.roomId).update({
       'videoUrl': newUrl,
       'currentEpisodeIndex': index,
@@ -375,18 +352,12 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
   @override
   Widget build(BuildContext context) {
     return PopScope(
-      canPop: false, // Chặn thoát tự động
+      canPop: false,
       onPopInvokedWithResult: (didPop, result) async {
-        if (didPop) return; // Nếu đã pop rồi thì thôi
-
+        if (didPop) return;
         await _leaveRoom();
-
-        // Sau khi dọn dẹp xong, thực hiện thoát màn hình thủ công
-        if (context.mounted) {
-          Navigator.of(context).pop();
-        }
+        if (context.mounted) Navigator.of(context).pop();
       },
-
       child: Scaffold(
         backgroundColor: const Color(0xFF15141F),
         resizeToAvoidBottomInset: true,
@@ -398,8 +369,8 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
             onPressed: () => _leaveRoom(),
           ),
           title: Text(
-            _roomName.isEmpty ? "Đang tải..." : "$_roomName",
-            style: TextStyle(color: Colors.white),
+            _roomName.isEmpty ? "Đang tải..." : _roomName,
+            style: const TextStyle(color: Colors.white),
           ),
           centerTitle: false,
           actions: [
@@ -422,12 +393,10 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
           top: false,
           child: Column(
             children: [
-              // VÙNG CUỘN: tất cả nội dung
               Expanded(
                 child: CustomScrollView(
                   controller: _scrollController,
                   slivers: [
-                    // VIDEO PLAYER
                     SliverToBoxAdapter(
                       child: AspectRatio(
                         aspectRatio: 16 / 9,
@@ -440,32 +409,20 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
                               ),
                       ),
                     ),
-
-                    // TÊN PHIM
                     SliverToBoxAdapter(child: _buildMovieTitleHeader()),
-
-                    // DANH SÁCH TẬP (chỉ hiện khi phim bộ)
                     if (_episodes.isNotEmpty || _loadingEpisodes)
                       SliverToBoxAdapter(child: _buildEpisodeSection()),
-
-                    // PLAYLIST (ngay dưới tên phim)
                     SliverToBoxAdapter(child: _buildPlaylistBar()),
-
-                    SliverToBoxAdapter(
-                      child: const Divider(color: Colors.white12, height: 1),
+                    const SliverToBoxAdapter(
+                      child: Divider(color: Colors.white12, height: 1),
                     ),
-
-                    // AVATAR + NÚT MIC/CAM
                     SliverToBoxAdapter(child: _buildParticipantAndControls()),
-
-                    SliverToBoxAdapter(
-                      child: const Divider(color: Colors.white12, height: 1),
+                    const SliverToBoxAdapter(
+                      child: Divider(color: Colors.white12, height: 1),
                     ),
-
-                    // NHÃN CHAT
-                    SliverToBoxAdapter(
+                    const SliverToBoxAdapter(
                       child: Padding(
-                        padding: const EdgeInsets.fromLTRB(16, 12, 16, 4),
+                        padding: EdgeInsets.fromLTRB(16, 12, 16, 4),
                         child: Text(
                           "Tin nhắn",
                           style: TextStyle(
@@ -477,23 +434,18 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
                         ),
                       ),
                     ),
-
-                    // TIN NHẮN (inline)
                     _buildChatMessages(),
-
                     const SliverToBoxAdapter(child: SizedBox(height: 12)),
                   ],
                 ),
               ),
-
-              // Ô NHẬP TIN (cố định dưới)
               _buildInputArea(),
             ],
           ),
         ),
-      ), // Scaffold
-    ); // PopScope
-  } // build
+      ),
+    );
+  }
 
   // ─────────────────────────────────────────────────────────────────────────
   //  WIDGETS
@@ -527,44 +479,36 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
               ),
               if (isTv) ...[
                 const SizedBox(height: 4),
-                Row(
-                  children: [
-                    Container(
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 3,
-                      ),
-                      decoration: BoxDecoration(
-                        color: Colors.blueAccent.withValues(alpha: 0.2),
-                        borderRadius: BorderRadius.circular(20),
-                        border: Border.all(
-                          color: Colors.blueAccent.withValues(alpha: 0.5),
-                          width: 1,
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 8,
+                    vertical: 3,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.blueAccent.withValues(alpha: 0.2),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(
+                      color: Colors.blueAccent.withValues(alpha: 0.5),
+                      width: 1,
+                    ),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.tv, color: Colors.blueAccent, size: 12),
+                      const SizedBox(width: 4),
+                      Text(
+                        _loadingEpisodes
+                            ? 'Đang tải số tập...'
+                            : 'Số tập: ${_episodes.length} / ${_episodeTotalFromApi ?? totalEpisodes ?? '?'} tập',
+                        style: const TextStyle(
+                          color: Colors.blueAccent,
+                          fontSize: 11,
+                          fontWeight: FontWeight.w600,
                         ),
                       ),
-                      child: Row(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          const Icon(
-                            Icons.tv,
-                            color: Colors.blueAccent,
-                            size: 12,
-                          ),
-                          const SizedBox(width: 4),
-                          Text(
-                            _loadingEpisodes
-                                ? 'Đang tải số tập...'
-                                : 'Số tập: ${_episodes.length} / ${_episodeTotalFromApi ?? totalEpisodes ?? '?'} tập',
-                            style: const TextStyle(
-                              color: Colors.blueAccent,
-                              fontSize: 11,
-                              fontWeight: FontWeight.w600,
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
+                    ],
+                  ),
                 ),
               ],
             ],
@@ -574,7 +518,6 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
     );
   }
 
-  // ─── DANH SÁCH TẬP PHIM ────────────────────────────────────────────────────
   Widget _buildEpisodeSection() {
     return Container(
       padding: const EdgeInsets.fromLTRB(16, 0, 16, 12),
@@ -633,15 +576,10 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
                 itemBuilder: (context, index) {
                   final isSelected = index == _currentEpisodeIndex;
                   final epName = _episodes[index]['filename']?.toString() ?? '';
-                  // Lấy số tập: dùng filename nếu có, sử dụng index+1 nếu không
                   final label = epName.isNotEmpty
-                      ? epName
-                            .replaceAll(RegExp(r'[^0-9]'), '')
-                            .replaceAll('', index == 0 ? '' : '')
+                      ? epName.replaceAll(RegExp(r'[^0-9]'), '')
                       : '${index + 1}';
-                  final displayLabel = label.isEmpty
-                      ? '${index + 1}'
-                      : label.length > 3
+                  final displayLabel = label.isEmpty || label.length > 3
                       ? '${index + 1}'
                       : label;
 
@@ -698,7 +636,6 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
           .collection('members')
           .snapshots(),
       builder: (context, snap) {
-        // Tạo map: agoraUid → displayName
         final Map<int, String> nameMap = {};
         if (snap.hasData) {
           for (final doc in snap.data!.docs) {
@@ -718,7 +655,6 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Hàng avatar
               SizedBox(
                 height: 120,
                 child: ListView(
@@ -733,7 +669,6 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
                 ),
               ),
               const SizedBox(height: 12),
-              // Nút Mic/Cam
               Row(
                 children: [
                   _controlButton(
@@ -917,9 +852,8 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
                 height: 100,
                 child: ListView.builder(
                   scrollDirection: Axis.horizontal,
-                  itemCount: docs.length + 1, // +1 cho nút "+"
+                  itemCount: docs.length + 1,
                   itemBuilder: (context, index) {
-                    // Ô "+" ở cuối
                     if (index == docs.length) {
                       return GestureDetector(
                         onTap: _showAddMovieSheet,
@@ -945,24 +879,20 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
                       );
                     }
 
-                    // Các phim trong danh sách
                     final movieDoc = docs[index];
                     return Stack(
                       clipBehavior: Clip.none,
                       children: [
-                        // Poster + tap để phát
                         GestureDetector(
                           onTap: () async {
                             if (_isHost) {
                               final isTv = movieDoc['is_tv'] as bool? ?? false;
-                              // Fetch episode count nếu là phim bộ và chưa có
                               int? totalEps =
                                   movieDoc['total_episodes'] as int?;
                               if (isTv && totalEps == null) {
                                 totalEps = await _api.getTvEpisodeCount(
                                   movieDoc['id'] as int,
                                 );
-                                // Lưu lại vào playlist doc để lần sau khỏi fetch
                                 if (totalEps != null) {
                                   _firestore
                                       .collection('rooms')
@@ -1018,8 +948,6 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
                             ),
                           ),
                         ),
-
-                        // Nút xóa (chỉ hiện với host)
                         if (_isHost)
                           Positioned(
                             top: -6,
@@ -1058,7 +986,7 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
     );
   }
 
-  // Bottom sheet chọn phim — có phim lẻ & phim bộ, phân trang
+  // ─── BOTTOM SHEET THÊM PHIM — CÓ TÌM KIẾM ONLINE THẬT ───────────────────
   void _showAddMovieSheet() {
     final List<Map<String, String>> movieCategories = [
       {'label': 'Hot', 'type': 'popular'},
@@ -1080,12 +1008,13 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
     final searchCtrl = TextEditingController();
     List<Movie> allMovies = [];
     List<int> addedIds = [];
-    String searchQuery = '';
-    int selectedCat = 0;
     bool loading = true;
+    bool isSearching = false; // true khi đang hiện kết quả search
     bool isTvMode = false;
+    int selectedCat = 0;
     int currentPage = 1;
     bool sheetInitialized = false;
+    Timer? debounce;
 
     showModalBottomSheet(
       context: context,
@@ -1100,6 +1029,7 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
               ? tvCategories
               : movieCategories;
 
+          // Load phim theo danh mục / trang
           Future<void> loadMovies({bool resetPage = false}) async {
             if (resetPage) currentPage = 1;
             setSheet(() => loading = true);
@@ -1117,11 +1047,38 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
             }
           }
 
+          // ── TÌM KIẾM ONLINE THẬT (debounce 600ms) ──────────────────────
+          void onSearchChanged(String query) {
+            if (debounce?.isActive ?? false) debounce!.cancel();
+            debounce = Timer(const Duration(milliseconds: 600), () async {
+              final q = query.trim();
+              if (q.isEmpty) {
+                // Xóa ô search → quay về load theo danh mục
+                setSheet(() => isSearching = false);
+                loadMovies(resetPage: true);
+                return;
+              }
+              setSheet(() {
+                loading = true;
+                isSearching = true;
+              });
+              try {
+                final results = await _api.searchMovies(q);
+                setSheet(() {
+                  allMovies = results;
+                  loading = false;
+                });
+              } catch (_) {
+                setSheet(() => loading = false);
+              }
+            });
+          }
+
+          // Thêm phim vào playlist
           Future<void> addMovie(Movie movie) async {
             if (addedIds.contains(movie.id)) return;
             setSheet(() => addedIds.add(movie.id));
 
-            // Fetch số tập nếu là phim bộ và chưa có
             int? episodeCount = movie.totalEpisodes;
             if (movie.isTv && episodeCount == null) {
               episodeCount = await _api.getTvEpisodeCount(movie.id);
@@ -1154,25 +1111,11 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
             }
           }
 
-          // Load lần đầu — chỉ gọi 1 lần duy nhất
+          // Load lần đầu — chỉ 1 lần
           if (!sheetInitialized) {
             sheetInitialized = true;
             WidgetsBinding.instance.addPostFrameCallback((_) => loadMovies());
           }
-
-          final movies = searchQuery.isEmpty
-              ? allMovies
-              : allMovies
-                    .where(
-                      (m) =>
-                          m.title.toLowerCase().contains(
-                            searchQuery.toLowerCase(),
-                          ) ||
-                          m.originalTitle.toLowerCase().contains(
-                            searchQuery.toLowerCase(),
-                          ),
-                    )
-                    .toList();
 
           return DraggableScrollableSheet(
             expand: false,
@@ -1206,7 +1149,7 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
                   ),
                 ),
 
-                // ── Toggle Phim Lẻ / Phim Bộ ──────────────────────────
+                // ── Toggle Phim Lẻ / Phim Bộ ─────────────────────────────
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
                   child: Container(
@@ -1223,9 +1166,9 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
                                 setSheet(() {
                                   isTvMode = false;
                                   selectedCat = 0;
-                                  searchQuery = '';
-                                  searchCtrl.clear();
                                   currentPage = 1;
+                                  isSearching = false;
+                                  searchCtrl.clear();
                                 });
                                 loadMovies();
                               }
@@ -1274,9 +1217,9 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
                                 setSheet(() {
                                   isTvMode = true;
                                   selectedCat = 0;
-                                  searchQuery = '';
-                                  searchCtrl.clear();
                                   currentPage = 1;
+                                  isSearching = false;
+                                  searchCtrl.clear();
                                 });
                                 loadMovies();
                               }
@@ -1323,7 +1266,7 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
                   ),
                 ),
 
-                // ── Search bar ─────────────────────────────────────────
+                // ── Search bar (tìm kiếm online thật) ────────────────────
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
                   child: Container(
@@ -1335,74 +1278,92 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
                     child: TextField(
                       controller: searchCtrl,
                       style: const TextStyle(color: Colors.white),
-                      decoration: const InputDecoration(
-                        hintText: 'Tìm kiếm phim...',
-                        hintStyle: TextStyle(color: Colors.white38),
-                        prefixIcon: Icon(Icons.search, color: Colors.redAccent),
+                      decoration: InputDecoration(
+                        hintText: 'Tìm kiếm phim toàn cầu...',
+                        hintStyle: const TextStyle(color: Colors.white38),
+                        prefixIcon: const Icon(
+                          Icons.search,
+                          color: Colors.redAccent,
+                        ),
+                        suffixIcon: isSearching
+                            ? IconButton(
+                                icon: const Icon(
+                                  Icons.close,
+                                  color: Colors.white38,
+                                  size: 18,
+                                ),
+                                onPressed: () {
+                                  searchCtrl.clear();
+                                  onSearchChanged('');
+                                },
+                              )
+                            : null,
                         border: InputBorder.none,
-                        contentPadding: EdgeInsets.symmetric(vertical: 14),
+                        contentPadding: const EdgeInsets.symmetric(
+                          vertical: 14,
+                        ),
                       ),
-                      onChanged: (v) => setSheet(() => searchQuery = v),
+                      onChanged: onSearchChanged, // GỌI SEARCH ONLINE
                     ),
                   ),
                 ),
 
-                // ── Category chips ─────────────────────────────────────
-                const SizedBox(height: 10),
-                SizedBox(
-                  height: 38,
-                  child: ListView.separated(
-                    scrollDirection: Axis.horizontal,
-                    padding: const EdgeInsets.symmetric(horizontal: 16),
-                    itemCount: categories.length,
-                    separatorBuilder: (_, __) => const SizedBox(width: 8),
-                    itemBuilder: (_, i) {
-                      final sel = i == selectedCat;
-                      return GestureDetector(
-                        onTap: () {
-                          if (selectedCat != i) {
-                            setSheet(() {
-                              selectedCat = i;
-                              searchQuery = '';
-                              searchCtrl.clear();
-                              currentPage = 1;
-                            });
-                            loadMovies();
-                          }
-                        },
-                        child: AnimatedContainer(
-                          duration: const Duration(milliseconds: 200),
-                          padding: const EdgeInsets.symmetric(
-                            horizontal: 14,
-                            vertical: 8,
-                          ),
-                          decoration: BoxDecoration(
-                            color: sel
-                                ? Colors.redAccent
-                                : const Color(0xFF211F30),
-                            borderRadius: BorderRadius.circular(20),
-                            border: Border.all(
-                              color: sel ? Colors.redAccent : Colors.white12,
+                // ── Category chips (ẩn khi đang search) ──────────────────
+                if (!isSearching) ...[
+                  const SizedBox(height: 10),
+                  SizedBox(
+                    height: 38,
+                    child: ListView.separated(
+                      scrollDirection: Axis.horizontal,
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      itemCount: categories.length,
+                      separatorBuilder: (_, __) => const SizedBox(width: 8),
+                      itemBuilder: (_, i) {
+                        final sel = i == selectedCat;
+                        return GestureDetector(
+                          onTap: () {
+                            if (selectedCat != i) {
+                              setSheet(() {
+                                selectedCat = i;
+                                currentPage = 1;
+                              });
+                              loadMovies();
+                            }
+                          },
+                          child: AnimatedContainer(
+                            duration: const Duration(milliseconds: 200),
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 14,
+                              vertical: 8,
+                            ),
+                            decoration: BoxDecoration(
+                              color: sel
+                                  ? Colors.redAccent
+                                  : const Color(0xFF211F30),
+                              borderRadius: BorderRadius.circular(20),
+                              border: Border.all(
+                                color: sel ? Colors.redAccent : Colors.white12,
+                              ),
+                            ),
+                            child: Text(
+                              categories[i]['label']!,
+                              style: TextStyle(
+                                color: sel ? Colors.white : Colors.white60,
+                                fontWeight: sel
+                                    ? FontWeight.bold
+                                    : FontWeight.normal,
+                                fontSize: 13,
+                              ),
                             ),
                           ),
-                          child: Text(
-                            categories[i]['label']!,
-                            style: TextStyle(
-                              color: sel ? Colors.white : Colors.white60,
-                              fontWeight: sel
-                                  ? FontWeight.bold
-                                  : FontWeight.normal,
-                              fontSize: 13,
-                            ),
-                          ),
-                        ),
-                      );
-                    },
+                        );
+                      },
+                    ),
                   ),
-                ),
-                const SizedBox(height: 8),
+                ] else
+                  const SizedBox(height: 10),
 
-                // ── Grid phim ─────────────────────────────────────────
+                // ── Grid phim ─────────────────────────────────────────────
                 Expanded(
                   child: loading
                       ? const Center(
@@ -1410,11 +1371,13 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
                             color: Colors.redAccent,
                           ),
                         )
-                      : movies.isEmpty
-                      ? const Center(
+                      : allMovies.isEmpty
+                      ? Center(
                           child: Text(
-                            'Không tìm thấy phim',
-                            style: TextStyle(color: Colors.white54),
+                            isSearching
+                                ? 'Không tìm thấy phim nào'
+                                : 'Không có phim',
+                            style: const TextStyle(color: Colors.white54),
                           ),
                         )
                       : GridView.builder(
@@ -1427,9 +1390,9 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
                                 mainAxisSpacing: 12,
                                 crossAxisSpacing: 12,
                               ),
-                          itemCount: movies.length,
+                          itemCount: allMovies.length,
                           itemBuilder: (_, i) {
-                            final movie = movies[i];
+                            final movie = allMovies[i];
                             final added = addedIds.contains(movie.id);
                             return GestureDetector(
                               onTap: () => addMovie(movie),
@@ -1455,7 +1418,6 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
                                 ),
                                 child: Stack(
                                   children: [
-                                    // Poster
                                     ClipRRect(
                                       borderRadius: BorderRadius.circular(8),
                                       child: Image.network(
@@ -1465,7 +1427,6 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
                                         fit: BoxFit.cover,
                                       ),
                                     ),
-                                    // Badge phim bộ
                                     if (movie.isTv)
                                       Positioned(
                                         top: 6,
@@ -1493,7 +1454,6 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
                                           ),
                                         ),
                                       ),
-                                    // Gradient + tên
                                     Positioned(
                                       bottom: 0,
                                       left: 0,
@@ -1533,7 +1493,6 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
                                         ),
                                       ),
                                     ),
-                                    // Dấu check khi đã thêm
                                     if (added)
                                       Positioned(
                                         top: 6,
@@ -1559,8 +1518,8 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
                         ),
                 ),
 
-                // ── Phân trang ────────────────────────────────────────
-                if (searchQuery.isEmpty)
+                // ── Phân trang (ẩn khi đang search) ──────────────────────
+                if (!isSearching)
                   Container(
                     padding: const EdgeInsets.symmetric(vertical: 10),
                     color: const Color(0xFF211F30),
@@ -1619,7 +1578,7 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
           );
         },
       ),
-    );
+    ).whenComplete(() => debounce?.cancel());
   }
 
   // ─────────────────────────────────────────────────────────────────────────
@@ -1651,7 +1610,6 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
 
         final docs = snapshot.data!.docs;
 
-        // Tự cuộn xuống cuối khi có tin mới
         WidgetsBinding.instance.addPostFrameCallback((_) {
           if (_scrollController.hasClients) {
             _scrollController.animateTo(
@@ -1733,10 +1691,12 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
     );
   }
 
-  // --- Rời phòng ---
+  // ─────────────────────────────────────────────────────────────────────────
+  //  LEAVE / DELETE ROOM
+  // ─────────────────────────────────────────────────────────────────────────
+
   Future<void> _leaveRoom() async {
     if (_isHost) {
-      // Host rời → hiện dialog xác nhận xóa phòng
       final confirm = await showDialog<bool>(
         context: context,
         builder: (ctx) => AlertDialog(
@@ -1749,7 +1709,7 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
             style: TextStyle(color: Colors.white, fontWeight: FontWeight.bold),
           ),
           content: const Text(
-            'Bạn là chủ phòng. Khi rời đi, phòng sẽ bị xóa và tất cả mọi người sẽ bị đầt ra ngoài.',
+            'Bạn là chủ phòng. Khi rời đi, phòng sẽ bị xóa và tất cả mọi người sẽ bị đẩy ra ngoài.',
             style: TextStyle(color: Colors.white70),
           ),
           actions: [
@@ -1790,34 +1750,26 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
     if (mounted) Navigator.of(context).pop();
   }
 
-  // Xóa toàn bộ phòng
   Future<void> _deleteRoom() async {
     _isRoomActive = false;
     _videoController?.removeListener(_hostVideoListener);
     _roomSubscription?.cancel();
-
     _videoController?.pause();
     _videoController?.dispose();
 
     final roomRef = _firestore.collection('rooms').doc(widget.roomId);
-    final batch = _firestore.batch(); // Khởi tạo batch để gom lệnh xóa
+    final batch = _firestore.batch();
 
     try {
       final subs = ['playlist', 'messages', 'members'];
-
       for (final sub in subs) {
         final snap = await roomRef.collection(sub).get();
         for (final doc in snap.docs) {
-          batch.delete(doc.reference); // Thêm lệnh xóa vào batch
+          batch.delete(doc.reference);
         }
       }
-
-      // Thêm lệnh xóa document chính của phòng vào batch
       batch.delete(roomRef);
-
-      // 2. Thực thi tất cả lệnh xóa trong 1 lần duy nhất
       await batch.commit();
-
       debugPrint("✅ Đã xóa toàn bộ dữ liệu phòng: ${widget.roomId}");
     } catch (e) {
       debugPrint("❌ Lỗi khi xóa phòng: $e");
