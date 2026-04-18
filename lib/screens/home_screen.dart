@@ -838,7 +838,7 @@ class _HomeScreenState extends State<HomeScreen> {
                   mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     const Text(
-                      'Rạp Phim',
+                      'CineFlix Movie',
                       style: TextStyle(
                         color: Colors.redAccent,
                         fontSize: 24,

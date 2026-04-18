@@ -455,8 +455,10 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
     return StreamBuilder<DocumentSnapshot>(
       stream: _firestore.collection('rooms').doc(widget.roomId).snapshots(),
       builder: (context, snapshot) {
-        if (!snapshot.hasData || !snapshot.data!.exists)
+        if (!snapshot.hasData || !snapshot.data!.exists) {
           return const SizedBox();
+        }
+
         final data = snapshot.data!.data() as Map<String, dynamic>;
         final title = data['movieTitle'] as String? ?? 'Đang tải...';
         final isTv = data['movieIsTv'] as bool? ?? false;
@@ -995,13 +997,11 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
       {'label': 'Hành Động', 'type': 'action'},
       {'label': 'Hài', 'type': 'comedy'},
       {'label': 'Kinh Dị', 'type': 'horror'},
-      {'label': 'Viễn Tưởng', 'type': 'scifi'},
     ];
 
     final List<Map<String, String>> tvCategories = [
       {'label': 'Phổ Biến', 'type': 'tv_popular'},
       {'label': 'Đánh Giá Cao', 'type': 'tv_top_rated'},
-      {'label': 'Chiếu Hôm Nay', 'type': 'tv_airing_today'},
       {'label': 'Hoạt Hình', 'type': 'tv_animation'},
     ];
 
@@ -1009,7 +1009,7 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
     List<Movie> allMovies = [];
     List<int> addedIds = [];
     bool loading = true;
-    bool isSearching = false; // true khi đang hiện kết quả search
+    bool isSearching = false;
     bool isTvMode = false;
     int selectedCat = 0;
     int currentPage = 1;
@@ -1025,17 +1025,27 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
       ),
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setSheet) {
+          final currentCategories = isTvMode ? tvCategories : movieCategories;
+
           List<Map<String, String>> categories = isTvMode
               ? tvCategories
               : movieCategories;
 
-          // Load phim theo danh mục / trang
-          Future<void> loadMovies({bool resetPage = false}) async {
+          Future<void> loadMovies({
+            bool resetPage = false,
+            bool? forceTvMode,
+          }) async {
             if (resetPage) currentPage = 1;
+
+            final targetTvMode = forceTvMode ?? isTvMode;
+            final targetCategories = targetTvMode
+                ? tvCategories
+                : movieCategories;
+
             setSheet(() => loading = true);
             try {
               final res = await _api.getMovies(
-                categories[selectedCat]['type']!,
+                targetCategories[selectedCat]['type']!,
                 page: currentPage,
               );
               setSheet(() {
@@ -1047,13 +1057,11 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
             }
           }
 
-          // ── TÌM KIẾM ONLINE THẬT (debounce 600ms) ──────────────────────
           void onSearchChanged(String query) {
             if (debounce?.isActive ?? false) debounce!.cancel();
             debounce = Timer(const Duration(milliseconds: 600), () async {
               final q = query.trim();
               if (q.isEmpty) {
-                // Xóa ô search → quay về load theo danh mục
                 setSheet(() => isSearching = false);
                 loadMovies(resetPage: true);
                 return;
@@ -1074,7 +1082,6 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
             });
           }
 
-          // Thêm phim vào playlist
           Future<void> addMovie(Movie movie) async {
             if (addedIds.contains(movie.id)) return;
             setSheet(() => addedIds.add(movie.id));
@@ -1111,10 +1118,59 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
             }
           }
 
-          // Load lần đầu — chỉ 1 lần
           if (!sheetInitialized) {
             sheetInitialized = true;
             WidgetsBinding.instance.addPostFrameCallback((_) => loadMovies());
+          }
+
+          void switchMode(bool toTv) {
+            if (isTvMode == toTv) return;
+            setSheet(() {
+              isTvMode = toTv;
+              selectedCat = 0;
+              currentPage = 1;
+              isSearching = false;
+              searchCtrl.clear();
+            });
+            loadMovies(resetPage: true, forceTvMode: toTv);
+          }
+
+          Widget modeTab(
+            String title,
+            IconData icon,
+            bool active,
+            VoidCallback onTap,
+          ) {
+            return Expanded(
+              child: GestureDetector(
+                onTap: onTap,
+                child: Container(
+                  padding: const EdgeInsets.symmetric(vertical: 10),
+                  decoration: BoxDecoration(
+                    color: active ? Colors.redAccent : Colors.white10,
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      Icon(
+                        icon,
+                        color: active ? Colors.white : Colors.white38,
+                        size: 18,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        title,
+                        style: TextStyle(
+                          color: active ? Colors.white : Colors.white38,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            );
           }
 
           return DraggableScrollableSheet(
@@ -1124,7 +1180,6 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
             minChildSize: 0.5,
             builder: (_, scrollCtrl) => Column(
               children: [
-                // Handle
                 Container(
                   margin: const EdgeInsets.only(top: 12, bottom: 4),
                   width: 40,
@@ -1148,125 +1203,26 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
                     ),
                   ),
                 ),
-
-                // ── Toggle Phim Lẻ / Phim Bộ ─────────────────────────────
                 Padding(
-                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
-                  child: Container(
-                    decoration: BoxDecoration(
-                      color: const Color(0xFF211F30),
-                      borderRadius: BorderRadius.circular(12),
-                    ),
-                    child: Row(
-                      children: [
-                        Expanded(
-                          child: GestureDetector(
-                            onTap: () {
-                              if (isTvMode) {
-                                setSheet(() {
-                                  isTvMode = false;
-                                  selectedCat = 0;
-                                  currentPage = 1;
-                                  isSearching = false;
-                                  searchCtrl.clear();
-                                });
-                                loadMovies();
-                              }
-                            },
-                            child: AnimatedContainer(
-                              duration: const Duration(milliseconds: 200),
-                              padding: const EdgeInsets.symmetric(vertical: 10),
-                              decoration: BoxDecoration(
-                                color: !isTvMode
-                                    ? Colors.redAccent
-                                    : Colors.transparent,
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(
-                                    Icons.movie,
-                                    color: !isTvMode
-                                        ? Colors.white
-                                        : Colors.white38,
-                                    size: 16,
-                                  ),
-                                  const SizedBox(width: 6),
-                                  Text(
-                                    'Phim Lẻ',
-                                    style: TextStyle(
-                                      color: !isTvMode
-                                          ? Colors.white
-                                          : Colors.white38,
-                                      fontWeight: !isTvMode
-                                          ? FontWeight.bold
-                                          : FontWeight.normal,
-                                      fontSize: 14,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                        Expanded(
-                          child: GestureDetector(
-                            onTap: () {
-                              if (!isTvMode) {
-                                setSheet(() {
-                                  isTvMode = true;
-                                  selectedCat = 0;
-                                  currentPage = 1;
-                                  isSearching = false;
-                                  searchCtrl.clear();
-                                });
-                                loadMovies();
-                              }
-                            },
-                            child: AnimatedContainer(
-                              duration: const Duration(milliseconds: 200),
-                              padding: const EdgeInsets.symmetric(vertical: 10),
-                              decoration: BoxDecoration(
-                                color: isTvMode
-                                    ? Colors.redAccent
-                                    : Colors.transparent,
-                                borderRadius: BorderRadius.circular(12),
-                              ),
-                              child: Row(
-                                mainAxisAlignment: MainAxisAlignment.center,
-                                children: [
-                                  Icon(
-                                    Icons.tv,
-                                    color: isTvMode
-                                        ? Colors.white
-                                        : Colors.white38,
-                                    size: 16,
-                                  ),
-                                  const SizedBox(width: 6),
-                                  Text(
-                                    'Phim Bộ',
-                                    style: TextStyle(
-                                      color: isTvMode
-                                          ? Colors.white
-                                          : Colors.white38,
-                                      fontWeight: isTvMode
-                                          ? FontWeight.bold
-                                          : FontWeight.normal,
-                                      fontSize: 14,
-                                    ),
-                                  ),
-                                ],
-                              ),
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
+                  padding: const EdgeInsets.symmetric(horizontal: 16),
+                  child: Row(
+                    children: [
+                      modeTab(
+                        'Phim Lẻ',
+                        Icons.movie_outlined,
+                        !isTvMode,
+                        () => switchMode(false),
+                      ),
+                      const SizedBox(width: 10),
+                      modeTab(
+                        'Phim Bộ',
+                        Icons.tv_rounded,
+                        isTvMode,
+                        () => switchMode(true),
+                      ),
+                    ],
                   ),
                 ),
-
-                // ── Search bar (tìm kiếm online thật) ────────────────────
                 Padding(
                   padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
                   child: Container(
@@ -1303,12 +1259,10 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
                           vertical: 14,
                         ),
                       ),
-                      onChanged: onSearchChanged, // GỌI SEARCH ONLINE
+                      onChanged: onSearchChanged,
                     ),
                   ),
                 ),
-
-                // ── Category chips (ẩn khi đang search) ──────────────────
                 if (!isSearching) ...[
                   const SizedBox(height: 10),
                   SizedBox(
@@ -1316,18 +1270,15 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
                     child: ListView.separated(
                       scrollDirection: Axis.horizontal,
                       padding: const EdgeInsets.symmetric(horizontal: 16),
-                      itemCount: categories.length,
+                      itemCount: currentCategories.length,
                       separatorBuilder: (_, __) => const SizedBox(width: 8),
                       itemBuilder: (_, i) {
                         final sel = i == selectedCat;
                         return GestureDetector(
                           onTap: () {
                             if (selectedCat != i) {
-                              setSheet(() {
-                                selectedCat = i;
-                                currentPage = 1;
-                              });
-                              loadMovies();
+                              setSheet(() => selectedCat = i);
+                              loadMovies(resetPage: true);
                             }
                           },
                           child: AnimatedContainer(
@@ -1362,8 +1313,6 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
                   ),
                 ] else
                   const SizedBox(height: 10),
-
-                // ── Grid phim ─────────────────────────────────────────────
                 Expanded(
                   child: loading
                       ? const Center(
@@ -1517,11 +1466,14 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
                           },
                         ),
                 ),
-
-                // ── Phân trang (ẩn khi đang search) ──────────────────────
                 if (!isSearching)
                   Container(
-                    padding: const EdgeInsets.symmetric(vertical: 10),
+                    padding: EdgeInsets.only(
+                      top: 10,
+                      left: 10,
+                      right: 10,
+                      bottom: MediaQuery.of(ctx).padding.bottom + 10,
+                    ),
                     color: const Color(0xFF211F30),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
