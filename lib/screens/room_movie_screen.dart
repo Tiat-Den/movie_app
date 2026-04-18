@@ -346,10 +346,18 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
   @override
   Widget build(BuildContext context) {
     return PopScope(
-      canPop: false,
-      onPopInvokedWithResult: (didPop, result) {
-        if (!didPop) _leaveRoom();
+      canPop: false, // Chặn thoát tự động
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) return; // Nếu đã pop rồi thì thôi
+
+        await _leaveRoom();
+
+        // Sau khi dọn dẹp xong, thực hiện thoát màn hình thủ công
+        if (context.mounted) {
+          Navigator.of(context).pop();
+        }
       },
+
       child: Scaffold(
         backgroundColor: const Color(0xFF15141F),
         resizeToAvoidBottomInset: true,
@@ -1741,27 +1749,50 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
       await _deleteRoom();
     }
 
+    try {
+      await _engine.stopPreview();
+      await _engine.leaveChannel();
+      await _engine.release();
+      debugPrint("Agora đã được dọn dẹp sạch sẽ!");
+    } catch (e) {
+      debugPrint("Lỗi dọn dẹp Agora: $e");
+    }
+
     if (mounted) Navigator.of(context).pop();
   }
 
-  // Xóa toàn bộ phòng (cả subcollections)
+  // Xóa toàn bộ phòng
   Future<void> _deleteRoom() async {
-    // Stop listener before deleting to avoid NOT_FOUND spam
     _isRoomActive = false;
     _videoController?.removeListener(_hostVideoListener);
     _roomSubscription?.cancel();
 
+    _videoController?.pause();
+    _videoController?.dispose();
+
     final roomRef = _firestore.collection('rooms').doc(widget.roomId);
-    final subs = ['playlist', 'messages', 'members'];
+    final batch = _firestore.batch(); // Khởi tạo batch để gom lệnh xóa
 
-    for (final sub in subs) {
-      final snap = await roomRef.collection(sub).get();
-      for (final doc in snap.docs) {
-        await doc.reference.delete();
+    try {
+      final subs = ['playlist', 'messages', 'members'];
+
+      for (final sub in subs) {
+        final snap = await roomRef.collection(sub).get();
+        for (final doc in snap.docs) {
+          batch.delete(doc.reference); // Thêm lệnh xóa vào batch
+        }
       }
-    }
 
-    await roomRef.delete();
+      // Thêm lệnh xóa document chính của phòng vào batch
+      batch.delete(roomRef);
+
+      // 2. Thực thi tất cả lệnh xóa trong 1 lần duy nhất
+      await batch.commit();
+
+      debugPrint("✅ Đã xóa toàn bộ dữ liệu phòng: ${widget.roomId}");
+    } catch (e) {
+      debugPrint("❌ Lỗi khi xóa phòng: $e");
+    }
   }
 
   @override
@@ -1773,6 +1804,7 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
     _chewieController?.dispose();
     _chatController.dispose();
     _scrollController.dispose();
+    _engine.stopPreview();
     _engine.leaveChannel();
     _engine.release();
     super.dispose();

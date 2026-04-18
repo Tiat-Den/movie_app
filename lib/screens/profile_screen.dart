@@ -1,5 +1,6 @@
-import 'package:flutter/material.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:flutter/material.dart';
 import '../services/auth_service.dart';
 
 class ProfileScreen extends StatefulWidget {
@@ -11,6 +12,7 @@ class ProfileScreen extends StatefulWidget {
 
 class _ProfileScreenState extends State<ProfileScreen> {
   final AuthService _authService = AuthService();
+  final FirebaseFirestore _firestore = FirebaseFirestore.instance;
   User? currentUser;
 
   @override
@@ -19,15 +21,14 @@ class _ProfileScreenState extends State<ProfileScreen> {
     currentUser = _authService.getCurrentUser();
   }
 
+  // --- HÀM ĐỔI MẬT KHẨU (Chỉ dành cho người dùng Email) ---
   void _showChangePasswordDialog() {
     final oldPasswordController = TextEditingController();
     final newPasswordController = TextEditingController();
     final confirmPasswordController = TextEditingController();
-
     bool obscureOld = true;
     bool obscureNew = true;
     bool obscureConfirm = true;
-
     bool isLoading = false;
 
     showDialog(
@@ -40,68 +41,29 @@ class _ProfileScreenState extends State<ProfileScreen> {
             "Đổi mật khẩu",
             style: TextStyle(color: Colors.white),
           ),
-
           content: SingleChildScrollView(
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                TextField(
-                  controller: oldPasswordController,
-                  obscureText: obscureOld,
-                  style: const TextStyle(color: Colors.white),
-                  decoration: InputDecoration(
-                    labelText: "Mật khẩu cũ",
-                    labelStyle: const TextStyle(color: Colors.grey),
-                    suffixIcon: IconButton(
-                      icon: Icon(
-                        obscureOld ? Icons.visibility_off : Icons.visibility,
-                        color: Colors.grey,
-                      ),
-                      onPressed: () =>
-                          setDialogState(() => obscureOld = !obscureOld),
-                    ),
-                  ),
+                _buildDialogTextField(
+                  oldPasswordController,
+                  "Mật khẩu cũ",
+                  obscureOld,
+                  () => setDialogState(() => obscureOld = !obscureOld),
                 ),
                 const SizedBox(height: 10),
-
-                TextField(
-                  controller: newPasswordController,
-                  obscureText: obscureNew,
-                  style: const TextStyle(color: Colors.white),
-                  decoration: InputDecoration(
-                    labelText: "Mật khẩu mới",
-                    labelStyle: const TextStyle(color: Colors.grey),
-                    suffixIcon: IconButton(
-                      icon: Icon(
-                        obscureNew ? Icons.visibility_off : Icons.visibility,
-                        color: Colors.grey,
-                      ),
-                      onPressed: () =>
-                          setDialogState(() => obscureNew = !obscureNew),
-                    ),
-                  ),
+                _buildDialogTextField(
+                  newPasswordController,
+                  "Mật khẩu mới",
+                  obscureNew,
+                  () => setDialogState(() => obscureNew = !obscureNew),
                 ),
                 const SizedBox(height: 10),
-
-                TextField(
-                  controller: confirmPasswordController,
-                  obscureText: obscureConfirm,
-                  style: const TextStyle(color: Colors.white),
-                  decoration: InputDecoration(
-                    labelText: "Nhập lại mật khẩu mới",
-                    labelStyle: const TextStyle(color: Colors.grey),
-                    suffixIcon: IconButton(
-                      icon: Icon(
-                        obscureConfirm
-                            ? Icons.visibility_off
-                            : Icons.visibility,
-                        color: Colors.grey,
-                      ),
-                      onPressed: () => setDialogState(
-                        () => obscureConfirm = !obscureConfirm,
-                      ),
-                    ),
-                  ),
+                _buildDialogTextField(
+                  confirmPasswordController,
+                  "Nhập lại mật khẩu mới",
+                  obscureConfirm,
+                  () => setDialogState(() => obscureConfirm = !obscureConfirm),
                 ),
               ],
             ),
@@ -111,85 +73,45 @@ class _ProfileScreenState extends State<ProfileScreen> {
               onPressed: isLoading ? null : () => Navigator.pop(context),
               child: const Text("Hủy", style: TextStyle(color: Colors.grey)),
             ),
-
             ElevatedButton(
-              onPressed: isLoading
-                  ? null
-                  : () async {
-                      String oldPass = oldPasswordController.text.trim();
-                      String newPass = newPasswordController.text.trim();
-                      String confirmPass = confirmPasswordController.text
-                          .trim();
-
-                      if (oldPass.isEmpty ||
-                          newPass.isEmpty ||
-                          confirmPass.isEmpty) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text("Vui lòng điền đầy đủ thông tin!"),
-                          ),
-                        );
-                        return;
-                      }
-                      if (newPass.length < 6) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text(
-                              "Mật khẩu mới phải từ 6 ký tự trở lên!",
-                            ),
-                          ),
-                        );
-                        return;
-                      }
-                      if (newPass != confirmPass) {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(
-                            content: Text("Mật khẩu xác nhận không khớp!"),
-                          ),
-                        );
-                        return;
-                      }
-
-                      setDialogState(() => isLoading = true);
-                      try {
-                        await _authService.updatePassword(oldPass, newPass);
-
-                        if (context.mounted) {
-                          Navigator.pop(context);
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text("Đổi mật khẩu thành công!"),
-                              backgroundColor: Colors.green,
-                            ),
-                          );
-                        }
-                      } catch (e) {
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                e.toString().replaceAll("Exception: ", ""),
-                              ),
-                              backgroundColor: Colors.red,
-                            ),
-                          );
-                        }
-                      } finally {
-                        if (context.mounted) {
-                          setDialogState(() => isLoading = false);
-                        }
-                      }
-                    },
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.redAccent,
               ),
+              onPressed: isLoading
+                  ? null
+                  : () async {
+                      if (newPasswordController.text !=
+                          confirmPasswordController.text) {
+                        _showToast("Mật khẩu xác nhận không khớp!");
+                        return;
+                      }
+                      setDialogState(() => isLoading = true);
+                      try {
+                        await _authService.updatePassword(
+                          oldPasswordController.text,
+                          newPasswordController.text,
+                        );
+                        if (context.mounted) {
+                          Navigator.pop(context);
+                          _showToast(
+                            "Đổi mật khẩu thành công!",
+                            isError: false,
+                          );
+                        }
+                      } catch (e) {
+                        _showToast(e.toString().replaceAll("Exception: ", ""));
+                      } finally {
+                        if (context.mounted)
+                          setDialogState(() => isLoading = false);
+                      }
+                    },
               child: isLoading
                   ? const SizedBox(
                       width: 20,
                       height: 20,
                       child: CircularProgressIndicator(
-                        color: Colors.white,
                         strokeWidth: 2,
+                        color: Colors.white,
                       ),
                     )
                   : const Text("Cập nhật"),
@@ -200,11 +122,11 @@ class _ProfileScreenState extends State<ProfileScreen> {
     );
   }
 
-  void _showEditProfileDialog() {
+  // --- HÀM CHỈNH SỬA THÔNG TIN (Cập nhật Firestore & DisplayName) ---
+  void _showEditProfileDialog(Map<String, dynamic> currentData) {
     final nameController = TextEditingController(
-      text: currentUser?.displayName,
+      text: currentData['name'] ?? currentUser?.displayName,
     );
-    final emailController = TextEditingController(text: currentUser?.email);
     bool isLoading = false;
 
     showDialog(
@@ -217,95 +139,51 @@ class _ProfileScreenState extends State<ProfileScreen> {
             "Chỉnh sửa thông tin",
             style: TextStyle(color: Colors.white),
           ),
-          content: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              TextField(
-                controller: nameController,
-                style: const TextStyle(color: Colors.white),
-                decoration: const InputDecoration(
-                  labelText: "Họ và tên",
-                  labelStyle: TextStyle(color: Colors.grey),
-                  enabledBorder: UnderlineInputBorder(
-                    borderSide: BorderSide(color: Colors.grey),
-                  ),
-                ),
+          content: TextField(
+            controller: nameController,
+            style: const TextStyle(color: Colors.white),
+            decoration: const InputDecoration(
+              labelText: "Họ và tên",
+              labelStyle: TextStyle(color: Colors.grey),
+              enabledBorder: UnderlineInputBorder(
+                borderSide: BorderSide(color: Colors.grey),
               ),
-              const SizedBox(height: 15),
-              TextField(
-                controller: emailController,
-                style: const TextStyle(color: Colors.white),
-                decoration: const InputDecoration(
-                  labelText: "Email mới",
-                  labelStyle: TextStyle(color: Colors.grey),
-                  enabledBorder: UnderlineInputBorder(
-                    borderSide: BorderSide(color: Colors.grey),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 10),
-            ],
+            ),
           ),
           actions: [
             TextButton(
-              onPressed: isLoading ? null : () => Navigator.pop(context),
+              onPressed: () => Navigator.pop(context),
               child: const Text("Hủy", style: TextStyle(color: Colors.grey)),
             ),
             ElevatedButton(
-              onPressed: isLoading
-                  ? null
-                  : () async {
-                      setDialogState(() => isLoading = true);
-                      try {
-                        await _authService.updateProfile(
-                          nameController.text.trim(),
-                          emailController.text.trim(),
-                        );
-
-                        if (context.mounted) {
-                          Navigator.pop(context);
-
-                          setState(() {
-                            currentUser = _authService.getCurrentUser();
-                          });
-
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(
-                              content: Text("Cập nhật thông tin thành công!"),
-                              backgroundColor: Colors.green,
-                            ),
-                          );
-                        }
-                      } catch (e) {
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            SnackBar(
-                              content: Text(
-                                e.toString().replaceAll("Exception: ", ""),
-                              ),
-                              backgroundColor: Colors.red,
-                            ),
-                          );
-                        }
-                      } finally {
-                        if (context.mounted) {
-                          setDialogState(() => isLoading = false);
-                        }
-                      }
-                    },
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.redAccent,
               ),
-              child: isLoading
-                  ? const SizedBox(
-                      width: 20,
-                      height: 20,
-                      child: CircularProgressIndicator(
-                        color: Colors.white,
-                        strokeWidth: 2,
-                      ),
-                    )
-                  : const Text("Lưu lại"),
+              onPressed: isLoading
+                  ? null
+                  : () async {
+                      if (nameController.text.trim().isEmpty) return;
+                      setDialogState(() => isLoading = true);
+                      try {
+                        // 1. Cập nhật Firestore
+                        await _firestore
+                            .collection('users')
+                            .doc(currentUser!.uid)
+                            .update({'name': nameController.text.trim()});
+                        // 2. Cập nhật DisplayName trong Firebase Auth
+                        await currentUser!.updateDisplayName(
+                          nameController.text.trim(),
+                        );
+
+                        if (context.mounted) Navigator.pop(context);
+                      } catch (e) {
+                        _showToast("Lỗi: $e");
+                      } finally {
+                        if (context.mounted)
+                          setDialogState(() => isLoading = false);
+                      }
+                    },
+              child: const Text("Lưu lại"),
             ),
           ],
         ),
@@ -326,115 +204,91 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ),
         iconTheme: const IconThemeData(color: Colors.white),
       ),
-      body: SingleChildScrollView(
-        child: Column(
-          children: [
-            const SizedBox(height: 20),
-            const Center(
-              child: CircleAvatar(
-                radius: 50,
-                backgroundColor: Colors.redAccent,
-                child: Icon(Icons.person, size: 60, color: Colors.white),
-              ),
-            ),
-            const SizedBox(height: 30),
-            _buildInfoTile(
-              Icons.person,
-              "Họ và tên",
-              currentUser?.displayName ?? "",
-            ),
-            _buildInfoTile(
-              Icons.email,
-              "Email",
-              currentUser?.email ?? "Chưa có email",
-            ),
+      // --- LẤY DỮ LIỆU TỪ FIRESTORE THỜI GIAN THỰC ---
+      body: StreamBuilder<DocumentSnapshot>(
+        stream: _firestore
+            .collection('users')
+            .doc(currentUser?.uid)
+            .snapshots(),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(
+              child: CircularProgressIndicator(color: Colors.redAccent),
+            );
+          }
 
-            _buildPasswordTile(),
+          // Dữ liệu từ Firestore (để lấy tên thật ông đã lưu)
+          var userData = snapshot.data?.data() as Map<String, dynamic>?;
 
-            const SizedBox(height: 40),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: OutlinedButton(
-                onPressed: _showEditProfileDialog,
-                style: OutlinedButton.styleFrom(
-                  side: const BorderSide(color: Colors.redAccent),
-                  minimumSize: const Size(double.infinity, 50),
+          // Kiểm tra xem có đăng nhập bằng Google không
+          bool isGoogle = false;
+          if (currentUser != null) {
+            isGoogle = currentUser!.providerData.any(
+              (p) => p.providerId == 'google.com',
+            );
+          }
+
+          return SingleChildScrollView(
+            child: Column(
+              children: [
+                const SizedBox(height: 20),
+                Center(
+                  child: CircleAvatar(
+                    radius: 50,
+                    backgroundColor: Colors.redAccent,
+                    backgroundImage: isGoogle && currentUser?.photoURL != null
+                        ? NetworkImage(currentUser!.photoURL!)
+                        : null,
+                    child: (!isGoogle || currentUser?.photoURL == null)
+                        ? const Icon(
+                            Icons.person,
+                            size: 60,
+                            color: Colors.white,
+                          )
+                        : null,
+                  ),
                 ),
-                child: const Text(
+                const SizedBox(height: 30),
+
+                // Họ tên lấy từ Firestore (userData['name']) ưu tiên hơn
+                _buildInfoTile(
+                  Icons.person,
+                  "Họ và tên",
+                  userData?['name'] ??
+                      currentUser?.displayName ??
+                      "Chưa đặt tên",
+                ),
+                _buildInfoTile(
+                  Icons.email,
+                  "Email",
+                  userData?['email'] ?? currentUser?.email ?? "Chưa có email",
+                ),
+
+                // Phần hiển thị mật khẩu/phương thức đăng nhập
+                _buildAuthMethodTile(isGoogle),
+
+                const SizedBox(height: 40),
+                _buildButton(
                   "Chỉnh sửa thông tin",
-                  style: TextStyle(color: Colors.redAccent, fontSize: 16),
+                  () => _showEditProfileDialog(userData ?? {}),
                 ),
-              ),
-            ),
-
-            const SizedBox(height: 15),
-
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 20),
-              child: OutlinedButton(
-                onPressed: () async {
+                const SizedBox(height: 15),
+                _buildButton("Đăng xuất", () async {
                   await _authService.signOut();
-                  Navigator.of(context).popUntil((route) => route.isFirst);
-                },
-                style: OutlinedButton.styleFrom(
-                  side: const BorderSide(color: Colors.redAccent),
-                  minimumSize: const Size(double.infinity, 50),
-                ),
-                child: const Text(
-                  "Đăng xuất",
-                  style: TextStyle(color: Colors.redAccent),
-                ),
-              ),
+                  if (mounted)
+                    Navigator.of(context).popUntil((route) => route.isFirst);
+                }),
+              ],
             ),
-          ],
-        ),
+          );
+        },
       ),
     );
   }
 
-  Widget _buildPasswordTile() {
-    bool isGoogleSignIn = false;
-    if (currentUser != null) {
-      for (var userInfo in currentUser!.providerData) {
-        if (userInfo.providerId == 'google.com') {
-          isGoogleSignIn = true;
-          break;
-        }
-      }
-    }
+  // --- CÁC WIDGET PHỤ TRỢ ---
 
-    if (isGoogleSignIn) {
-      return Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
-        child: Container(
-          padding: const EdgeInsets.all(15),
-          decoration: BoxDecoration(
-            color: const Color(0xFF211F30),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: const Row(
-            children: [
-              Icon(Icons.link, color: Colors.greenAccent),
-              SizedBox(width: 15),
-              Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(
-                    "Phương thức đăng nhập",
-                    style: TextStyle(color: Colors.grey, fontSize: 12),
-                  ),
-                  Text(
-                    "Tài khoản Google",
-                    style: TextStyle(color: Colors.white, fontSize: 16),
-                  ),
-                ],
-              ),
-            ],
-          ),
-        ),
-      );
-    }
-
+  Widget _buildAuthMethodTile(bool isGoogle) {
     return Padding(
       padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 10),
       child: Container(
@@ -445,30 +299,76 @@ class _ProfileScreenState extends State<ProfileScreen> {
         ),
         child: Row(
           children: [
-            const Icon(Icons.lock, color: Colors.redAccent),
+            Icon(
+              isGoogle ? Icons.link : Icons.lock,
+              color: isGoogle ? Colors.blue : Colors.redAccent,
+              size: 30,
+            ),
             const SizedBox(width: 15),
-            const Column(
+            Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                  "Mật khẩu",
-                  style: TextStyle(color: Colors.grey, fontSize: 12),
+                  isGoogle ? "Phương thức đăng nhập" : "Mật khẩu",
+                  style: const TextStyle(color: Colors.grey, fontSize: 12),
                 ),
                 Text(
-                  "********",
-                  style: TextStyle(color: Colors.white, fontSize: 16),
+                  isGoogle ? "Tài khoản Google" : "********",
+                  style: const TextStyle(color: Colors.white, fontSize: 16),
                 ),
               ],
             ),
             const Spacer(),
-            TextButton(
-              onPressed: _showChangePasswordDialog,
-              child: const Text(
-                "Đổi",
-                style: TextStyle(color: Colors.blueAccent),
+            if (!isGoogle)
+              TextButton(
+                onPressed: _showChangePasswordDialog,
+                child: const Text(
+                  "Đổi",
+                  style: TextStyle(color: Colors.blueAccent),
+                ),
               ),
-            ),
           ],
+        ),
+      ),
+    );
+  }
+
+  Widget _buildDialogTextField(
+    TextEditingController controller,
+    String label,
+    bool obscure,
+    VoidCallback toggle,
+  ) {
+    return TextField(
+      controller: controller,
+      obscureText: obscure,
+      style: const TextStyle(color: Colors.white),
+      decoration: InputDecoration(
+        labelText: label,
+        labelStyle: const TextStyle(color: Colors.grey),
+        suffixIcon: IconButton(
+          icon: Icon(
+            obscure ? Icons.visibility_off : Icons.visibility,
+            color: Colors.grey,
+          ),
+          onPressed: toggle,
+        ),
+      ),
+    );
+  }
+
+  Widget _buildButton(String text, VoidCallback onPressed) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(horizontal: 20),
+      child: OutlinedButton(
+        onPressed: onPressed,
+        style: OutlinedButton.styleFrom(
+          side: const BorderSide(color: Colors.redAccent),
+          minimumSize: const Size(double.infinity, 50),
+        ),
+        child: Text(
+          text,
+          style: const TextStyle(color: Colors.redAccent, fontSize: 16),
         ),
       ),
     );
@@ -502,6 +402,15 @@ class _ProfileScreenState extends State<ProfileScreen> {
             ),
           ],
         ),
+      ),
+    );
+  }
+
+  void _showToast(String msg, {bool isError = true}) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      SnackBar(
+        content: Text(msg),
+        backgroundColor: isError ? Colors.red : Colors.green,
       ),
     );
   }

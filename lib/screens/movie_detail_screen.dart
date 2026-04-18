@@ -21,12 +21,28 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
       "?"; // Lưu tổng số tập dự kiến (VD: 12, 24, Full)
   bool _isLoadingEpisodes = false;
 
+  List<Map<String, dynamic>>? _cast;
+
   @override
   void initState() {
     super.initState();
     // Nếu là phim bộ thì mới đi tìm thông tin tập
     if (widget.movie.isTv) {
       _fetchEpisodeInfo();
+    }
+
+    _fetchCast();
+  }
+
+  Future<void> _fetchCast() async {
+    final castData = await ApiService().getMovieCast(
+      widget.movie.id,
+      widget.movie.isTv,
+    );
+    if (mounted) {
+      setState(() {
+        _cast = castData.take(10).toList();
+      });
     }
   }
 
@@ -74,6 +90,67 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
       debugPrint("Lỗi lấy thông tin tập: $e");
       if (mounted) setState(() => _isLoadingEpisodes = false);
     }
+  }
+
+  //////////////////////////////////
+  Widget _buildCastList() {
+    if (_cast == null) return const Center(child: CircularProgressIndicator());
+    if (_cast!.isEmpty)
+      return const Text(
+        "Không có thông tin diễn viên",
+        style: TextStyle(color: Colors.white54),
+      );
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          "Diễn viên chính",
+          style: TextStyle(
+            color: Colors.white,
+            fontSize: 18,
+            fontWeight: FontWeight.bold,
+          ),
+        ),
+        const SizedBox(height: 12),
+        SizedBox(
+          height: 140,
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            itemCount: _cast!.length,
+            itemBuilder: (context, index) {
+              final actor = _cast![index];
+              return Container(
+                width: 80,
+                margin: const EdgeInsets.only(right: 12),
+                child: Column(
+                  children: [
+                    CircleAvatar(
+                      radius: 35,
+                      backgroundColor: Colors.grey[900],
+                      backgroundImage: CachedNetworkImageProvider(
+                        actor['profile_path'],
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    Text(
+                      actor['name'],
+                      maxLines: 2,
+                      textAlign: TextAlign.center,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        color: Colors.white70,
+                        fontSize: 11,
+                      ),
+                    ),
+                  ],
+                ),
+              );
+            },
+          ),
+        ),
+      ],
+    );
   }
 
   Widget _buildStarRating(double rating) {
@@ -179,6 +256,9 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
 
                     _buildStarRating(widget.movie.voteAverage),
                     const SizedBox(height: 20),
+
+                    _buildCastList(),
+                    const SizedBox(height: 25),
 
                     // NÚT XEM PHIM
                     SizedBox(

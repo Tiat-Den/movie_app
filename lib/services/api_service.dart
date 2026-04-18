@@ -243,4 +243,35 @@ class ApiService {
     }
     return [];
   }
+
+  Future<List<Map<String, dynamic>>> getMovieCast(
+    int movieId,
+    bool isTv,
+  ) async {
+    final type = isTv ? 'tv' : 'movie';
+    final url = Uri.parse(
+      '$_baseUrl/$type/$movieId/credits?api_key=$_apiKey&language=vi-VN',
+    );
+
+    try {
+      final res = await http.get(url);
+      if (res.statusCode == 200) {
+        final data = json.decode(res.body);
+        final List cast = data['cast'] ?? [];
+        return cast
+            .map(
+              (c) => {
+                'name': c['name'],
+                'profile_path': c['profile_path'] != null
+                    ? 'https://image.tmdb.org/t/p/w200${c['profile_path']}'
+                    : 'https://www.gravatar.com/avatar/00000000000000000000000000000000?d=mp&f=y',
+              },
+            )
+            .toList();
+      }
+    } catch (e) {
+      debugPrint("Lỗi lấy diễn viên: $e");
+    }
+    return [];
+  }
 }

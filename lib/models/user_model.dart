@@ -1,11 +1,11 @@
-class User {
+class Users {
   final String uid;
   final String email;
   final String userName;
   final String displayName;
   final String photoUrl;
 
-  User({
+  Users({
     required this.uid,
     required this.email,
     required this.userName,
@@ -13,8 +13,8 @@ class User {
     required this.photoUrl,
   });
 
-  factory User.fromMap(Map<String, dynamic> map, String documentId) {
-    return User(
+  factory Users.fromMap(Map<String, dynamic> map, String documentId) {
+    return Users(
       uid: documentId,
       email: map['email'] ?? '',
       userName: map['userName'] ?? '',
