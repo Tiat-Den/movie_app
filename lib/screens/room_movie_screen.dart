@@ -1,4 +1,4 @@
-﻿import 'package:agora_rtc_engine/agora_rtc_engine.dart';
+import 'package:agora_rtc_engine/agora_rtc_engine.dart';
 import 'package:flutter/material.dart';
 import 'package:movie_app/models/movie_model.dart';
 import 'package:movie_app/services/api_service.dart';
@@ -9,6 +9,8 @@ import 'package:chewie/chewie.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'dart:async';
+import 'dart:convert';
+import 'package:http/http.dart' as http;
 
 import '../models/room_model.dart';
 
@@ -50,6 +52,7 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
   bool _loadingEpisodes = false;
   int _currentEpisodeIndex = 0;
   int _lastEpisodeMovieId = -1; // tránh reload khi không đổi phim
+  String? _episodeTotalFromApi;
 
   // --- Guard flags ---
   bool _isRoomActive = true;
@@ -274,13 +277,39 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
       _episodes = [];
     });
     try {
-      final eps = await _api.getEpisodeList(movieId, title, '', isTv: true);
-      if (!mounted) return;
-      setState(() {
-        _episodes = eps;
-        _currentEpisodeIndex = initialIndex;
-        _loadingEpisodes = false;
-      });
+      final cleanTitle = title.split(':').first.trim();
+      final res = await http.get(Uri.parse(
+          'https://phimapi.com/v1/api/tim-kiem?keyword=${Uri.encodeComponent(cleanTitle)}&limit=1'));
+      if (res.statusCode == 200) {
+        final data = json.decode(res.body);
+        final items = data['data']?['items'];
+        if (items != null && items.isNotEmpty) {
+          final detailRes = await http.get(
+              Uri.parse('https://phimapi.com/phim/${items[0]['slug']}'));
+          if (detailRes.statusCode == 200) {
+            final detailData = json.decode(detailRes.body);
+            final eps = detailData['episodes'][0]['server_data'] ?? [];
+            final epTotal =
+                detailData['movie']?['episode_total']?.toString();
+
+            if (mounted) {
+              setState(() {
+                _episodeTotalFromApi = epTotal;
+                _episodes = eps;
+                _currentEpisodeIndex = initialIndex;
+                _loadingEpisodes = false;
+              });
+              return;
+            }
+          }
+        }
+      }
+      // Nếu không tìm thấy hoặc có lỗi thì tắt loading
+      if (mounted) {
+        setState(() {
+          _loadingEpisodes = false;
+        });
+      }
     } catch (e) {
       debugPrint('_loadEpisodes error: $e');
       if (mounted) setState(() => _loadingEpisodes = false);
@@ -523,9 +552,9 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
                           ),
                           const SizedBox(width: 4),
                           Text(
-                            totalEpisodes != null && totalEpisodes > 0
-                                ? 'Phim bộ • $totalEpisodes tập'
-                                : 'Phim bộ',
+                            _loadingEpisodes
+                                ? 'Đang tải số tập...'
+                                : 'Số tập: ${_episodes.length} / ${_episodeTotalFromApi ?? totalEpisodes ?? '?'} tập',
                             style: const TextStyle(
                               color: Colors.blueAccent,
                               fontSize: 11,

@@ -43,6 +43,7 @@ class RoomService {
         ...newRoom.toMap(),
         'movieIsTv': firstMovie?.isTv ?? false,
         'movieTotalEpisodes': episodeCount,
+        'currentMovieId': firstMovie?.id,
       });
 
       if (movieList.isNotEmpty) {

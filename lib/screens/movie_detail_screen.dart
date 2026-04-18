@@ -181,6 +181,94 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
     );
   }
 
+  Widget _buildEpisodeList() {
+    if (_episodes == null || _episodes!.isEmpty) return const SizedBox();
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        const Text(
+          "Danh sách tập",
+          style: TextStyle(color: Colors.white54, fontSize: 14),
+        ),
+        const SizedBox(height: 10),
+        SizedBox(
+          height: 45,
+          child: ListView.builder(
+            scrollDirection: Axis.horizontal,
+            itemCount: _episodes!.length,
+            itemBuilder: (context, index) {
+              return GestureDetector(
+                onTap: () async {
+                  showDialog(
+                    context: context,
+                    barrierDismissible: false,
+                    builder: (context) => const Center(
+                      child: CircularProgressIndicator(color: Colors.red),
+                    ),
+                  );
+
+                  String? realVideoUrl = await ApiService().getMovieStreamLink(
+                    widget.movie.id,
+                    widget.movie.title,
+                    widget.movie.originalTitle,
+                    isTv: widget.movie.isTv,
+                    episodeIndex: index,
+                  );
+
+                  if (mounted) Navigator.pop(context);
+
+                  if (realVideoUrl != null && mounted) {
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => WatchMovieScreen(
+                          movie: widget.movie,
+                          videoUrl: realVideoUrl,
+                          isOffline: false,
+                          episodes: _episodes,
+                          initialEpisodeIndex: index,
+                        ),
+                      ),
+                    );
+                  } else {
+                    if (mounted) {
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        const SnackBar(
+                          content: Text("Không tìm thấy link phim phù hợp!"),
+                          backgroundColor: Colors.red,
+                        ),
+                      );
+                    }
+                  }
+                },
+                child: Container(
+                  width: 50,
+                  margin: const EdgeInsets.only(right: 10),
+                  decoration: BoxDecoration(
+                    color: Colors.white10,
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: Colors.white24),
+                  ),
+                  alignment: Alignment.center,
+                  child: Text(
+                    "${index + 1}",
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.bold,
+                      fontSize: 16,
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ),
+        const SizedBox(height: 20),
+      ],
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -256,6 +344,8 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
 
                     _buildStarRating(widget.movie.voteAverage),
                     const SizedBox(height: 20),
+
+                    if (widget.movie.isTv) _buildEpisodeList(),
 
                     _buildCastList(),
                     const SizedBox(height: 25),

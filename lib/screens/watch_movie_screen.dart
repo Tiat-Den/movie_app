@@ -16,6 +16,7 @@ class WatchMovieScreen extends StatefulWidget {
   final String videoUrl;
   final bool isOffline;
   final List<dynamic>? episodes; // Danh sách tập phim từ API
+  final int initialEpisodeIndex;
 
   const WatchMovieScreen({
     super.key,
@@ -23,6 +24,7 @@ class WatchMovieScreen extends StatefulWidget {
     required this.videoUrl,
     required this.isOffline,
     this.episodes,
+    this.initialEpisodeIndex = 0,
   });
 
   @override
@@ -44,12 +46,13 @@ class _WatchMovieScreenState extends State<WatchMovieScreen> {
   bool _isDownloading = false;
   String _downloadStatus = "";
   late String _currentUrl;
-  int _currentEpisodeIndex = 0;
+  late int _currentEpisodeIndex;
 
   @override
   void initState() {
     super.initState();
     _currentUrl = widget.videoUrl;
+    _currentEpisodeIndex = widget.initialEpisodeIndex;
     // Cho phép xoay ngang màn hình khi xem phim
     SystemChrome.setPreferredOrientations([
       DeviceOrientation.portraitUp,

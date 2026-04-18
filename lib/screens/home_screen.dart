@@ -1,4 +1,5 @@
-﻿import 'package:flutter/material.dart';
+import 'dart:async';
+import 'package:flutter/material.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:movie_app/screens/downloaded_movies_screen.dart';
 import 'package:movie_app/services/auth_service.dart';
@@ -21,6 +22,16 @@ class _HomeScreenState extends State<HomeScreen> {
   final ApiService _apiService = ApiService();
   final TextEditingController _searchController = TextEditingController();
   final AuthService _authService = AuthService();
+
+  String _searchQuery = "";
+  Timer? _debounceTimer;
+
+  @override
+  void dispose() {
+    _searchController.dispose();
+    _debounceTimer?.cancel();
+    super.dispose();
+  }
 
   // --- Trạng thái ---
   String _trendingTime = "day";
@@ -397,16 +408,19 @@ class _HomeScreenState extends State<HomeScreen> {
             borderSide: BorderSide.none,
           ),
         ),
-        onSubmitted: (query) {
-          if (query.isNotEmpty) {
-            Navigator.push(
-              context,
-              MaterialPageRoute(
-                builder: (context) =>
-                    CategoryScreen(title: query, type: "search_$query"),
-              ),
-            );
+        onChanged: (query) {
+          if (query.trim().isEmpty) {
+            setState(() {
+              _searchQuery = "";
+            });
+            return;
           }
+          if (_debounceTimer?.isActive ?? false) _debounceTimer!.cancel();
+          _debounceTimer = Timer(const Duration(milliseconds: 500), () {
+            setState(() {
+              _searchQuery = query.trim();
+            });
+          });
         },
       ),
     );
@@ -623,6 +637,89 @@ class _HomeScreenState extends State<HomeScreen> {
   // CHÍNH: HIỂN THỊ NỘI DUNG
   // ============================================================
   Widget _buildMainBody() {
+    if (_searchQuery.isNotEmpty) {
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Padding(
+            padding: const EdgeInsets.all(16),
+            child: Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                const Text(
+                  "Kết quả tìm kiếm",
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+                IconButton(
+                  onPressed: () => setState(() {
+                    _searchQuery = "";
+                    _searchController.clear();
+                  }),
+                  icon: const Icon(Icons.close, color: Colors.redAccent),
+                ),
+              ],
+            ),
+          ),
+          FutureBuilder<List<Movie>>(
+            future: _apiService.searchMovies(_searchQuery),
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return const Center(
+                  child: CircularProgressIndicator(color: Colors.red),
+                );
+              }
+
+              final movies = snapshot.data ?? [];
+
+              if (movies.isEmpty) {
+                return const Center(
+                  child: Padding(
+                    padding: EdgeInsets.all(20.0),
+                    child: Text(
+                      "Không tìm thấy phim",
+                      style: TextStyle(color: Colors.white38),
+                    ),
+                  ),
+                );
+              }
+
+              return GridView.builder(
+                shrinkWrap: true,
+                physics: const NeverScrollableScrollPhysics(),
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+                  crossAxisCount: 3,
+                  childAspectRatio: 0.65,
+                  crossAxisSpacing: 12,
+                  mainAxisSpacing: 12,
+                ),
+                itemCount: movies.length,
+                itemBuilder: (context, i) => GestureDetector(
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(
+                      builder: (_) => MovieDetailScreen(movie: movies[i]),
+                    ),
+                  ),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(10),
+                    child: Image.network(
+                      movies[i].posterPath,
+                      fit: BoxFit.cover,
+                    ),
+                  ),
+                ),
+              );
+            },
+          ),
+        ],
+      );
+    }
+
     if (_selectedMediaType != "all" || _selectedGenreIds.isNotEmpty) {
       String genreQuery = _selectedGenreIds.join(",");
       String filterType =
