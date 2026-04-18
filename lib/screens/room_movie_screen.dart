@@ -1735,7 +1735,14 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
       );
 
       if (confirm != true) return;
+
+      _roomSubscription?.cancel();
+      _roomSubscription = null;
+
       await _deleteRoom();
+    } else {
+      _roomSubscription?.cancel();
+      _roomSubscription = null;
     }
 
     try {
@@ -1753,7 +1760,6 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
   Future<void> _deleteRoom() async {
     _isRoomActive = false;
     _videoController?.removeListener(_hostVideoListener);
-    _roomSubscription?.cancel();
     _videoController?.pause();
     _videoController?.dispose();
 

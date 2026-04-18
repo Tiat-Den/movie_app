@@ -143,8 +143,10 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
   }
 
   Widget _buildCastList() {
-    if (_cast == null)
+    if (_cast == null) {
       return const Center(child: CircularProgressIndicator(color: Colors.red));
+    }
+
     if (_cast!.isEmpty) return const SizedBox.shrink();
 
     return Column(
@@ -200,8 +202,9 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
   }
 
   Widget _buildTrailerSection() {
-    if (_trailerKey == null || _youtubeController == null)
+    if (_trailerKey == null || _youtubeController == null) {
       return const SizedBox.shrink();
+    }
 
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
@@ -386,17 +389,17 @@ class _MovieDetailScreenState extends State<MovieDetailScreen> {
                     _buildStarRating(widget.movie.voteAverage),
                     const SizedBox(height: 20),
 
-                    // 🎬 DANH SÁCH TẬP (Nếu là phim bộ)
+                    // DANH SÁCH TẬP (Nếu là phim bộ)
                     if (widget.movie.isTv) _buildEpisodeList(),
 
-                    // 👥 DIỄN VIÊN
+                    // DIỄN VIÊN
                     _buildCastList(),
                     const SizedBox(height: 25),
 
-                    // 🎥 TRAILER
+                    // TRAILER
                     _buildTrailerSection(),
 
-                    // 🔴 NÚT XEM PHIM
+                    // NÚT XEM PHIM
                     SizedBox(
                       width: double.infinity,
                       height: 50,
