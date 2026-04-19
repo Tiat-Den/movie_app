@@ -70,7 +70,7 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
     await [Permission.microphone, Permission.camera].request();
     _engine = createAgoraRtcEngine();
     await _engine.initialize(
-      const RtcEngineContext(appId: "023fa962272d462885c866711762e20b"),
+      const RtcEngineContext(appId: "e8c6c5381eeb45b58cf8119a94115e68"),
     );
 
     _engine.registerEventHandler(
@@ -118,7 +118,12 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
       token: "",
       channelId: widget.roomId,
       uid: 0,
-      options: const ChannelMediaOptions(),
+      options: const ChannelMediaOptions(
+        clientRoleType:
+            ClientRoleType.clientRoleBroadcaster, // Bắt buộc dòng này
+        publishCameraTrack: true,
+        publishMicrophoneTrack: true,
+      ),
     );
   }
 
@@ -455,10 +460,8 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
     return StreamBuilder<DocumentSnapshot>(
       stream: _firestore.collection('rooms').doc(widget.roomId).snapshots(),
       builder: (context, snapshot) {
-        if (!snapshot.hasData || !snapshot.data!.exists) {
+        if (!snapshot.hasData || !snapshot.data!.exists)
           return const SizedBox();
-        }
-
         final data = snapshot.data!.data() as Map<String, dynamic>;
         final title = data['movieTitle'] as String? ?? 'Đang tải...';
         final isTv = data['movieIsTv'] as bool? ?? false;
@@ -637,13 +640,15 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
           .doc(widget.roomId)
           .collection('members')
           .snapshots(),
+
       builder: (context, snap) {
         final Map<int, String> nameMap = {};
         if (snap.hasData) {
           for (final doc in snap.data!.docs) {
-            final uid = doc['agoraUid'] as int? ?? 0;
-            final name = doc['name'] as String? ?? 'User';
-            nameMap[uid] = name;
+            final u = doc.data() as Map<String, dynamic>;
+            final aId = u['agoraUid'] as int? ?? 0;
+            final name = u['name'] as String? ?? 'User';
+            nameMap[aId] = name;
           }
         }
 
@@ -662,10 +667,10 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
                 child: ListView(
                   scrollDirection: Axis.horizontal,
                   children: [
-                    _buildUserBox(_currentUid, myName, isMe: true),
+                    _buildUserBox(0, myName, isMe: true),
                     ..._remoteUsers.map(
-                      (uid) =>
-                          _buildUserBox(uid.toString(), nameMap[uid] ?? 'User'),
+                      (agoraUid) =>
+                          _buildUserBox(agoraUid, nameMap[agoraUid] ?? 'User'),
                     ),
                   ],
                 ),
@@ -750,7 +755,7 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
     );
   }
 
-  Widget _buildUserBox(String uid, String name, {bool isMe = false}) {
+  Widget _buildUserBox(int agoraUid, String name, {bool isMe = false}) {
     return Padding(
       padding: const EdgeInsets.only(right: 16),
       child: Column(
@@ -788,7 +793,7 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
                   ? AgoraVideoView(
                       controller: VideoViewController.remote(
                         rtcEngine: _engine,
-                        canvas: VideoCanvas(uid: int.parse(uid)),
+                        canvas: VideoCanvas(uid: agoraUid),
                         connection: RtcConnection(channelId: widget.roomId),
                       ),
                     )
@@ -997,11 +1002,13 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
       {'label': 'Hành Động', 'type': 'action'},
       {'label': 'Hài', 'type': 'comedy'},
       {'label': 'Kinh Dị', 'type': 'horror'},
+      {'label': 'Viễn Tưởng', 'type': 'scifi'},
     ];
 
     final List<Map<String, String>> tvCategories = [
       {'label': 'Phổ Biến', 'type': 'tv_popular'},
       {'label': 'Đánh Giá Cao', 'type': 'tv_top_rated'},
+      {'label': 'Chiếu Hôm Nay', 'type': 'tv_airing_today'},
       {'label': 'Hoạt Hình', 'type': 'tv_animation'},
     ];
 
@@ -1025,27 +1032,16 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
       ),
       builder: (ctx) => StatefulBuilder(
         builder: (ctx, setSheet) {
-          final currentCategories = isTvMode ? tvCategories : movieCategories;
-
           List<Map<String, String>> categories = isTvMode
               ? tvCategories
               : movieCategories;
 
-          Future<void> loadMovies({
-            bool resetPage = false,
-            bool? forceTvMode,
-          }) async {
+          Future<void> loadMovies({bool resetPage = false}) async {
             if (resetPage) currentPage = 1;
-
-            final targetTvMode = forceTvMode ?? isTvMode;
-            final targetCategories = targetTvMode
-                ? tvCategories
-                : movieCategories;
-
             setSheet(() => loading = true);
             try {
               final res = await _api.getMovies(
-                targetCategories[selectedCat]['type']!,
+                categories[selectedCat]['type']!,
                 page: currentPage,
               );
               setSheet(() {
@@ -1123,56 +1119,6 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
             WidgetsBinding.instance.addPostFrameCallback((_) => loadMovies());
           }
 
-          void switchMode(bool toTv) {
-            if (isTvMode == toTv) return;
-            setSheet(() {
-              isTvMode = toTv;
-              selectedCat = 0;
-              currentPage = 1;
-              isSearching = false;
-              searchCtrl.clear();
-            });
-            loadMovies(resetPage: true, forceTvMode: toTv);
-          }
-
-          Widget modeTab(
-            String title,
-            IconData icon,
-            bool active,
-            VoidCallback onTap,
-          ) {
-            return Expanded(
-              child: GestureDetector(
-                onTap: onTap,
-                child: Container(
-                  padding: const EdgeInsets.symmetric(vertical: 10),
-                  decoration: BoxDecoration(
-                    color: active ? Colors.redAccent : Colors.white10,
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.center,
-                    children: [
-                      Icon(
-                        icon,
-                        color: active ? Colors.white : Colors.white38,
-                        size: 18,
-                      ),
-                      const SizedBox(width: 8),
-                      Text(
-                        title,
-                        style: TextStyle(
-                          color: active ? Colors.white : Colors.white38,
-                          fontWeight: FontWeight.bold,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
-              ),
-            );
-          }
-
           return DraggableScrollableSheet(
             expand: false,
             initialChildSize: 0.92,
@@ -1204,23 +1150,122 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
                   ),
                 ),
                 Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 16),
-                  child: Row(
-                    children: [
-                      modeTab(
-                        'Phim Lẻ',
-                        Icons.movie_outlined,
-                        !isTvMode,
-                        () => switchMode(false),
-                      ),
-                      const SizedBox(width: 10),
-                      modeTab(
-                        'Phim Bộ',
-                        Icons.tv_rounded,
-                        isTvMode,
-                        () => switchMode(true),
-                      ),
-                    ],
+                  padding: const EdgeInsets.fromLTRB(16, 0, 16, 0),
+                  child: Container(
+                    decoration: BoxDecoration(
+                      color: const Color(0xFF211F30),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Row(
+                      children: [
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () {
+                              if (isTvMode) {
+                                setSheet(() {
+                                  isTvMode = false;
+                                  selectedCat = 0;
+                                  currentPage = 1;
+                                  isSearching = false;
+                                  searchCtrl.clear();
+                                });
+                                WidgetsBinding.instance.addPostFrameCallback(
+                                  (_) => loadMovies(),
+                                );
+                              }
+                            },
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 200),
+                              padding: const EdgeInsets.symmetric(vertical: 10),
+                              decoration: BoxDecoration(
+                                color: !isTvMode
+                                    ? Colors.redAccent
+                                    : Colors.transparent,
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    Icons.movie,
+                                    color: !isTvMode
+                                        ? Colors.white
+                                        : Colors.white38,
+                                    size: 16,
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    'Phim Lẻ',
+                                    style: TextStyle(
+                                      color: !isTvMode
+                                          ? Colors.white
+                                          : Colors.white38,
+                                      fontWeight: !isTvMode
+                                          ? FontWeight.bold
+                                          : FontWeight.normal,
+                                      fontSize: 14,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                        Expanded(
+                          child: GestureDetector(
+                            onTap: () {
+                              if (!isTvMode) {
+                                setSheet(() {
+                                  isTvMode = true;
+                                  selectedCat = 0;
+                                  currentPage = 1;
+                                  isSearching = false;
+                                  searchCtrl.clear();
+                                });
+                                WidgetsBinding.instance.addPostFrameCallback(
+                                  (_) => loadMovies(),
+                                );
+                              }
+                            },
+                            child: AnimatedContainer(
+                              duration: const Duration(milliseconds: 200),
+                              padding: const EdgeInsets.symmetric(vertical: 10),
+                              decoration: BoxDecoration(
+                                color: isTvMode
+                                    ? Colors.redAccent
+                                    : Colors.transparent,
+                                borderRadius: BorderRadius.circular(12),
+                              ),
+                              child: Row(
+                                mainAxisAlignment: MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    Icons.tv,
+                                    color: isTvMode
+                                        ? Colors.white
+                                        : Colors.white38,
+                                    size: 16,
+                                  ),
+                                  const SizedBox(width: 6),
+                                  Text(
+                                    'Phim Bộ',
+                                    style: TextStyle(
+                                      color: isTvMode
+                                          ? Colors.white
+                                          : Colors.white38,
+                                      fontWeight: isTvMode
+                                          ? FontWeight.bold
+                                          : FontWeight.normal,
+                                      fontSize: 14,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
                 Padding(
@@ -1270,15 +1315,18 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
                     child: ListView.separated(
                       scrollDirection: Axis.horizontal,
                       padding: const EdgeInsets.symmetric(horizontal: 16),
-                      itemCount: currentCategories.length,
+                      itemCount: categories.length,
                       separatorBuilder: (_, __) => const SizedBox(width: 8),
                       itemBuilder: (_, i) {
                         final sel = i == selectedCat;
                         return GestureDetector(
                           onTap: () {
                             if (selectedCat != i) {
-                              setSheet(() => selectedCat = i);
-                              loadMovies(resetPage: true);
+                              setSheet(() {
+                                selectedCat = i;
+                                currentPage = 1;
+                              });
+                              loadMovies();
                             }
                           },
                           child: AnimatedContainer(
@@ -1468,12 +1516,7 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
                 ),
                 if (!isSearching)
                   Container(
-                    padding: EdgeInsets.only(
-                      top: 10,
-                      left: 10,
-                      right: 10,
-                      bottom: MediaQuery.of(ctx).padding.bottom + 10,
-                    ),
+                    padding: const EdgeInsets.symmetric(vertical: 10),
                     color: const Color(0xFF211F30),
                     child: Row(
                       mainAxisAlignment: MainAxisAlignment.center,
