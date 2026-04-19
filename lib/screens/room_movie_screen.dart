@@ -91,7 +91,12 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
               });
         },
         onUserJoined: (RtcConnection connection, int remoteUid, int elapsed) {
-          setState(() => _remoteUsers.add(remoteUid));
+          debugPrint("-----> Thấy người mới vào: $remoteUid");
+          if (!_remoteUsers.contains(remoteUid)) {
+            setState(() {
+              _remoteUsers.add(remoteUid);
+            });
+          }
         },
         onUserOffline:
             (
@@ -99,13 +104,11 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
               int remoteUid,
               UserOfflineReasonType reason,
             ) {
-              setState(() => _remoteUsers.remove(remoteUid));
-              _firestore
-                  .collection('rooms')
-                  .doc(widget.roomId)
-                  .collection('members')
-                  .doc(remoteUid.toString())
-                  .delete();
+              debugPrint("-----> Người kia đã thoát: $remoteUid");
+              setState(() {
+                _remoteUsers.remove(remoteUid);
+              });
+              // Đừng xóa members trên firestore
             },
       ),
     );
@@ -668,10 +671,11 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
                   scrollDirection: Axis.horizontal,
                   children: [
                     _buildUserBox(0, myName, isMe: true),
-                    ..._remoteUsers.map(
-                      (agoraUid) =>
-                          _buildUserBox(agoraUid, nameMap[agoraUid] ?? 'User'),
-                    ),
+                    ..._remoteUsers.map((remoteUid) {
+                      String remoteName =
+                          nameMap[remoteUid] ?? "Người dùng $remoteUid";
+                      return _buildUserBox(remoteUid, remoteName, isMe: false);
+                    }),
                   ],
                 ),
               ),
@@ -782,28 +786,23 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
             ),
             child: ClipRRect(
               borderRadius: BorderRadius.circular(14),
-              child: (isMe && _isCamOn)
-                  ? AgoraVideoView(
-                      controller: VideoViewController(
-                        rtcEngine: _engine,
-                        canvas: const VideoCanvas(uid: 0),
-                      ),
-                    )
-                  : (!isMe)
-                  ? AgoraVideoView(
+              child: isMe
+                  ? (_isCamOn
+                        ? AgoraVideoView(
+                            controller: VideoViewController(
+                              rtcEngine: _engine,
+                              canvas: const VideoCanvas(uid: 0),
+                            ),
+                          )
+                        : _buildPlaceholder(isMe))
+                  : AgoraVideoView(
+                      // ĐỐI VỚI NGƯỜI KIA
                       controller: VideoViewController.remote(
                         rtcEngine: _engine,
-                        canvas: VideoCanvas(uid: agoraUid),
+                        canvas: VideoCanvas(
+                          uid: agoraUid,
+                        ), // Dùng trực tiếp agoraUid kiểu int
                         connection: RtcConnection(channelId: widget.roomId),
-                      ),
-                    )
-                  : Center(
-                      child: Icon(
-                        Icons.person,
-                        color: isMe
-                            ? Colors.redAccent.withValues(alpha: 0.6)
-                            : Colors.white24,
-                        size: 42,
                       ),
                     ),
             ),
@@ -818,6 +817,16 @@ class _RoomMovieScreenState extends State<RoomMovieScreen> {
             ),
           ),
         ],
+      ),
+    );
+  }
+
+  Widget _buildPlaceholder(bool isMe) {
+    return Center(
+      child: Icon(
+        Icons.person,
+        color: isMe ? Colors.redAccent.withOpacity(0.6) : Colors.white24,
+        size: 42,
       ),
     );
   }
